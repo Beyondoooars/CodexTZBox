@@ -36,7 +36,7 @@ const showDetail = ref(false)
           </button>
         </div>
         <div v-if="showDetail && message.detail" class="status-detail">{{ message.detail }}</div>
-        <p class="running-tip">提示：启动前需完全退出已有 Codex；关闭此窗口可最小化至托盘常驻运行。</p>
+        <p class="running-tip">提示：启动成功后将自动最小化至托盘；点击窗口右上角关闭也可常驻托盘。</p>
       </div>
       <div class="launch-actions">
         <div class="primary-actions">

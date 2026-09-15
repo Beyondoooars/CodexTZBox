@@ -18,9 +18,21 @@ fn call_backend_sync(_app: AppHandle, command: String, payload: Value) -> Result
 
 #[tauri::command]
 async fn backend(app: AppHandle, command: String, payload: Option<Value>) -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let cmd = command.clone();
+    let app_handle = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
         call_backend_sync(app, command, payload.unwrap_or_else(|| json!({})))
-    }).await.map_err(|e| e.to_string())?
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    if cmd == "launch" {
+        if let Some(window) = app_handle.get_webview_window("main") {
+            let _ = window.hide();
+        }
+    }
+
+    Ok(result)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -52,11 +64,19 @@ pub fn run() {
                         "launch" => {
                             let app_clone = app.clone();
                             tauri::async_runtime::spawn_blocking(move || {
-                                let _ = call_backend_sync(app_clone.clone(), "launch".into(), json!({}));
-                                if let Some(window) = app_clone.get_webview_window("main") {
-                                    let _ = window.show();
-                                    let _ = window.unminimize();
-                                    let _ = window.set_focus();
+                                match call_backend_sync(app_clone.clone(), "launch".into(), json!({})) {
+                                    Ok(_) => {
+                                        if let Some(window) = app_clone.get_webview_window("main") {
+                                            let _ = window.hide();
+                                        }
+                                    }
+                                    Err(_) => {
+                                        if let Some(window) = app_clone.get_webview_window("main") {
+                                            let _ = window.show();
+                                            let _ = window.unminimize();
+                                            let _ = window.set_focus();
+                                        }
+                                    }
                                 }
                             });
                         }
