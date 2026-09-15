@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{env, fs, io::{Read, Write}, net::{SocketAddr, TcpStream}, path::Path, process::{Command, Stdio}, time::{Duration, Instant}};
+use std::{env, fs, io::Write, path::Path, process::Command};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -13,12 +13,10 @@ pub struct Settings {
     pub offset: i32,
     #[serde(alias = "Executable")]
     pub executable: String,
-    #[serde(alias = "DreamSkinCompatible")]
-    pub dream_skin_compatible: bool,
 }
 impl Default for Settings {
     fn default() -> Self {
-        Self { mode: "zone".into(), zone_id: "Asia/Shanghai".into(), offset: 8, executable: String::new(), dream_skin_compatible: false }
+        Self { mode: "zone".into(), zone_id: "Asia/Shanghai".into(), offset: 8, executable: String::new() }
     }
 }
 pub fn zones() -> Value { serde_json::from_str(include_str!("zones.json")).expect("valid bundled zones") }
@@ -70,71 +68,6 @@ pub fn network_info() -> Result<Value, String> {
     if proxy.is_none() && direct.is_none() { return Err("无法获取公网 IP，请检查网络连接。".into()); }
     Ok(serde_json::json!({"proxy":proxy,"direct":direct,"proxyConfigured":has_proxy}))
 }
-// Read only a bounded loopback HTTP response, without proxies or redirects.
-pub fn endpoint_ready(port: u16) -> bool {
-    let read = || -> Option<()> {
-        let addr = SocketAddr::from(([127,0,0,1], port));
-        let mut stream = TcpStream::connect_timeout(&addr, Duration::from_millis(500)).ok()?;
-        stream.set_read_timeout(Some(Duration::from_secs(1))).ok()?;
-        stream.set_write_timeout(Some(Duration::from_secs(1))).ok()?;
-        write!(stream, "GET /json/version HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").ok()?;
-        // Chromium keeps this connection alive even when asked to close it.
-        // Stop at Content-Length instead of waiting for EOF and timing out.
-        let mut reader = std::io::BufReader::new(stream);
-        let mut bytes = Vec::new();
-        let deadline = Instant::now() + Duration::from_secs(2);
-        while !bytes.ends_with(b"\r\n\r\n") {
-            if bytes.len() >= 8192 || Instant::now() >= deadline { return None; }
-            let mut byte = [0]; reader.read_exact(&mut byte).ok()?;
-            bytes.push(byte[0]);
-        }
-        let header = std::str::from_utf8(&bytes).ok()?;
-        if !header.starts_with("HTTP/1.1 200 ") && !header.starts_with("HTTP/1.0 200 ") { return None; }
-        let mut length = None;
-        for line in header.lines().skip(1) {
-            if let Some((name, value)) = line.split_once(':') {
-                if name.eq_ignore_ascii_case("transfer-encoding") { return None; }
-                if name.eq_ignore_ascii_case("content-length") {
-                    if length.is_some() { return None; }
-                    length = Some(value.trim().parse::<usize>().ok()?);
-                }
-            }
-        }
-        let length = length.filter(|n| *n > 0 && *n <= 65536)?;
-        let mut body = vec![0; length]; reader.read_exact(&mut body).ok()?;
-        let v: Value = serde_json::from_slice(&body).ok()?;
-        let socket = v["webSocketDebuggerUrl"].as_str()?;
-        if ![format!("ws://127.0.0.1:{port}/"),format!("ws://localhost:{port}/"),format!("ws://[::1]:{port}/")].iter().any(|p| socket.starts_with(p)) { return None; }
-        Some(())
-    };
-    read().is_some()
-}
-pub fn wait_endpoint(port: u16, timeout: Duration) -> Result<(), String> {
-    let deadline = Instant::now() + timeout;
-    loop {
-        if endpoint_ready(port) { return Ok(()); }
-        if Instant::now() >= deadline { return Err(format!("客户端已启动，但皮肤调试接口 127.0.0.1:{port} 未就绪。请完全退出客户端后勾选兼容启动重试。")); }
-        std::thread::sleep(Duration::from_millis(250));
-    }
-}
-pub fn run_logged(mut command: Command, log_path: &Path, timeout: Duration) -> Result<(), String> {
-    fs::create_dir_all(log_path.parent().ok_or("日志路径无效")?).map_err(|e| e.to_string())?;
-    let log = fs::File::create(log_path).map_err(|e| e.to_string())?;
-    let mut child = command.stdin(Stdio::null()).stdout(log.try_clone().map_err(|e| e.to_string())?).stderr(log).spawn().map_err(|e| e.to_string())?;
-    let deadline = Instant::now() + timeout;
-    loop {
-        if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
-            if status.success() { return Ok(()); }
-            let detail = fs::read_to_string(log_path).unwrap_or_default().lines().rev().take(6).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n");
-            return Err(format!("Dream Skin 应用失败（{status}）：\n{detail}\n日志：{}", log_path.display()));
-        }
-        if Instant::now() >= deadline {
-            std::thread::spawn(move || { let _ = child.wait(); });
-            return Err(format!("Dream Skin 验证超时，尚未确认皮肤生效，任务仍在后台运行。日志：{}", log_path.display()));
-        }
-        std::thread::sleep(Duration::from_millis(250));
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -142,43 +75,14 @@ mod tests {
     #[test]
     fn legacy_settings_and_atomic_replace() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("settings.json"), "\u{feff}{\"Mode\":\"offset\",\"Offset\":-5,\"DreamSkinCompatible\":true}").unwrap();
+        fs::write(dir.path().join("settings.json"), "\u{feff}{\"Mode\":\"offset\",\"Offset\":-5}").unwrap();
         let mut s = load(dir.path()).unwrap();
         assert_eq!(tz(&s).unwrap(), "Etc/GMT+5");
-        assert!(s.dream_skin_compatible);
         s.offset = 9;
         save(dir.path(), &s).unwrap();
         assert_eq!(load(dir.path()).unwrap().offset, 9);
         s.offset = 99;
         assert!(save(dir.path(), &s).is_err());
         assert_eq!(load(dir.path()).unwrap().offset, 9);
-    }
-    #[test]
-    fn debugger_endpoint_rejects_unrelated_http_service() {
-        for valid in [false, true] {
-            let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
-            let port = listener.local_addr().unwrap().port();
-            let (done, wait) = std::sync::mpsc::channel();
-            let server = std::thread::spawn(move || {
-                let (mut connection, _) = listener.accept().unwrap();
-                connection.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
-                // TCP may split one HTTP request across several reads.
-                let mut request = Vec::new();
-                while !request.ends_with(b"\r\n\r\n") {
-                    let mut byte = [0];
-                    connection.read_exact(&mut byte).unwrap();
-                    request.push(byte[0]);
-                    assert!(request.len() < 4096);
-                }
-                let host = if valid { "127.0.0.1" } else { "example.invalid" };
-                let body = format!("{{\"webSocketDebuggerUrl\":\"ws://{host}:{port}/devtools/browser/test\"}}");
-                write!(connection, "HTTP/1.1 200 OK\r\nContent-Length:{}\r\n\r\n{body}", body.len()).unwrap();
-                // Model Chromium: keep the socket open until the probe returns.
-                let _ = wait.recv_timeout(Duration::from_secs(3));
-            });
-            assert_eq!(endpoint_ready(port), valid);
-            done.send(()).unwrap();
-            server.join().unwrap();
-        }
     }
 }

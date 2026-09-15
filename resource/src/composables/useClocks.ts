@@ -56,10 +56,12 @@ export function useClocks(settings: Ref<Settings>, localZone: Ref<string>) {
     const safeZone = isValidTimeZone(zone) ? zone : 'UTC'
     const date = fixed === undefined ? now.value : new Date(now.value.getTime() + fixed * 3_600_000)
     const value = parts(date, fixed === undefined ? safeZone : 'UTC')
+    const minutes = fixed === undefined ? offsetFor(now.value, safeZone) : fixed * 60
     return {
       time: `${value.hour}:${value.minute}:${value.second}`,
       date: `${value.year} 年 ${value.month} 月 ${value.day} 日　${value.weekday}`,
-      offset: offsetText(fixed === undefined ? offsetFor(now.value, safeZone) : fixed * 60),
+      offset: offsetText(minutes),
+      offsetMinutes: minutes,
     }
   }
 

@@ -27,13 +27,13 @@ function forwardCopy(key: 'domestic' | 'international', ip: string) {
   <section class="surface network-panel" aria-labelledby="network-title">
     <div class="panel-heading">
       <div>
-        <MacLabel id="network-title" as="h2" variant="headline">公网 IP 与时区</MacLabel>
-        <p>参考网络出口所在时区。</p>
+        <MacLabel id="network-title" as="h2" variant="headline">网络出口与时区感知</MacLabel>
+        <p>独立检测国内与国际出口公网 IP 及地理归属地，可一键将识别时区填入设置草稿。</p>
       </div>
       <MacButton :disabled="networkBusy" @click="emit('refresh')">
         <MacSpinner v-if="networkBusy" size="small" />
         <AppIcon v-else name="refresh" />
-        {{ networkBusy ? '正在刷新…' : '刷新 IP' }}
+        {{ networkBusy ? '正在探测…' : '重新探测网络' }}
       </MacButton>
     </div>
     <div class="network-grid">

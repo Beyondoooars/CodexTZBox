@@ -25,8 +25,15 @@ function updateAppearance(value: string | number) {
     <div class="toolbar-inner">
       <div class="brand-mark"><AppIcon name="clock" :size="20" /></div>
       <div class="toolbar-title">
-        <MacLabel as="h1" variant="headline">Codex 时区启动器</MacLabel>
-        <p>仅影响 Codex，系统时区保持不变</p>
+        <div class="title-row">
+          <MacLabel as="h1" variant="headline">Codex 时区启动器</MacLabel>
+          <span class="toolbar-badge toolbar-badge--platform">Windows 10/11</span>
+          <span class="toolbar-badge toolbar-badge--tray">
+            <span class="tray-dot"></span>
+            托盘常驻就绪
+          </span>
+        </div>
+        <p>进程级独立时区隔离 · 宿主系统时钟零干扰</p>
       </div>
       <div class="toolbar-appearance">
         <span>外观</span>

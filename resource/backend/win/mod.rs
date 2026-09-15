@@ -1,4 +1,4 @@
-use crate::common::{endpoint_ready, load, run_logged, save, settings, tz, wait_endpoint, zones, network_info, Settings};
+use crate::common::{load, network_info, save, settings, tz, zones, Settings};
 use quick_xml::events::Event;
 use serde_json::{json, Value};
 use std::{fs, mem::size_of, os::windows::{ffi::OsStrExt, process::CommandExt}, path::{Path, PathBuf}, process::{Command, Stdio}, time::Duration};
@@ -168,88 +168,19 @@ fn create_shortcut() -> Result<PathBuf, String> {
     file.persist(&path).map_err(|e| e.to_string())?;
     Ok(path)
 }
-fn skin_root() -> Result<PathBuf, String> { Ok(known_folder(&FOLDERID_LocalAppData)?.join("CodexDreamSkin")) }
-fn skin_state(root: &Path) -> Result<Value, String> {
-    let path = root.join("state.json");
-    if !path.exists() { return Ok(json!({})); }
-    let bytes = fs::read(path).map_err(|e| e.to_string())?;
-    serde_json::from_slice(bytes.strip_prefix(&[0xef,0xbb,0xbf]).unwrap_or(&bytes)).map_err(|e| e.to_string())
-}
-fn skin_port(state: &Value) -> Result<u16, String> {
-    let port = state.get("port").and_then(Value::as_u64).unwrap_or(9335);
-    if !(1024..=65535).contains(&port) { return Err("Dream Skin 端口无效。".into()); }
-    Ok(port as u16)
-}
-fn skin_script(root: &Path, state: &Value) -> Result<PathBuf, String> {
-    let mut candidates = vec![root.join("engine/scripts"), root.join("scripts")];
-    if let Some(injector) = state["injectorPath"].as_str().map(PathBuf::from).filter(|p| p.is_absolute()) {
-        if let Some(parent) = injector.parent() { candidates.push(parent.to_path_buf()); }
-    }
-    for directory in candidates {
-        if ["tray-dream-skin.ps1", "common-windows.ps1", "theme-windows.ps1", "localization-windows.ps1", "start-dream-skin.ps1"].iter().all(|name| directory.join(name).is_file()) {
-            return Ok(directory.join("start-dream-skin.ps1"));
-        }
-    }
-    Err("未找到完整的 Windows Dream Skin 安装。".into())
-}
-fn skin_tray_script(root: &Path, state: &Value) -> Result<PathBuf, String> {
-    let mut candidates = vec![root.join("engine/scripts"), root.join("scripts")];
-    if let Some(injector) = state["injectorPath"].as_str().map(PathBuf::from).filter(|p| p.is_absolute()) {
-        if let Some(parent) = injector.parent() { candidates.push(parent.to_path_buf()); }
-    }
-    for directory in candidates {
-        let tray = directory.join("tray-dream-skin.ps1");
-        let complete = ["common-windows.ps1", "theme-windows.ps1", "localization-windows.ps1", "start-dream-skin.ps1"]
-            .iter().all(|name| directory.join(name).is_file());
-        if tray.is_file() && complete { return Ok(tray); }
-    }
-    Err("未找到完整的 Windows Dream Skin 安装。".into())
-}
-fn launch_dream_skin(root: &Path, state: &Value) -> Result<Value, String> {
-    let tray = skin_tray_script(root, state)?;
-    let system = std::env::var_os("SystemRoot").ok_or("无法确定 Windows 系统目录")?;
-    let mut command = Command::new(PathBuf::from(system).join(r"System32\WindowsPowerShell\v1.0\powershell.exe"));
-    let working_dir = tray.parent().and_then(Path::parent).ok_or("Dream Skin 脚本目录无效")?;
-    command.args(["-NoProfile", "-STA", "-WindowStyle", "Hidden", "-ExecutionPolicy", "RemoteSigned", "-File"])
-        .arg(&tray).current_dir(working_dir).creation_flags(0x08000000)
-        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
-        .env_remove("TZ").env_remove("ELECTRON_RUN_AS_NODE");
-    command.spawn().map_err(|e| format!("无法启动 Dream Skin：{e}"))?;
-    Ok(json!({"launched":true,"path":tray,"message":"Dream Skin 已启动。"}))
-}
-fn apply_skin(dir: &Path, script: &Path, port: u16) -> Result<Value, String> {
-    if !endpoint_ready(port) { return Err("已保存兼容启动设置，但当前客户端没有皮肤调试接口。请保存工作并完全退出客户端，再点击“保存并启动 Codex”。".into()); }
-    let system = std::env::var_os("SystemRoot").ok_or("无法确定 Windows 系统目录")?;
-    let mut command = Command::new(PathBuf::from(system).join(r"System32\WindowsPowerShell\v1.0\powershell.exe"));
-    command.args(["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-ExecutionPolicy", "RemoteSigned", "-File"])
-        .arg(script).args(["-OperationLockTimeoutMilliseconds", "300000"])
-        .current_dir(script.parent().ok_or("皮肤脚本目录无效")?)
-        .creation_flags(0x08000000).env_remove("TZ").env_remove("ELECTRON_RUN_AS_NODE");
-    run_logged(command, &dir.join("dream-skin.log"), Duration::from_secs(330))?;
-    Ok(json!({"launched":true,"message":"Dream Skin 已完成皮肤应用和验证。"}))
-}
-fn launch(dir: &Path, s: Settings) -> Result<Value, String> {
+pub fn launch(dir: &Path, s: Settings) -> Result<Value, String> {
     tz(&s)?;
     let path = validate(&if s.executable.trim().is_empty() { discover() } else { s.executable.clone() })?;
     if is_running(&path)? { return Err("客户端正在运行，请保存工作并完全退出 Codex 后重试。".into()); }
     let mut cmd = Command::new(&path);
     cmd.env("TZ", tz(&s)?).env_remove("ELECTRON_RUN_AS_NODE").current_dir(path.parent().ok_or("客户端目录无效")?)
         .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).creation_flags(0x08000000);
-    let skin = if s.dream_skin_compatible {
-        let root = skin_root()?; let state = skin_state(&root)?; let port = skin_port(&state)?; let script = skin_script(&root, &state)?;
-        let profile = state["profilePath"].as_str().filter(|s| !s.trim().is_empty()).map(PathBuf::from).unwrap_or_else(|| root.join("cdp-profile"));
-        if !profile.is_absolute() { return Err("Dream Skin 用户目录必须是绝对路径。".into()); }
-        let listener = std::net::TcpListener::bind(("127.0.0.1", port)).map_err(|_| "Dream Skin 调试端口已被占用。")?; drop(listener);
-        cmd.arg("--remote-debugging-address=127.0.0.1").arg(format!("--remote-debugging-port={port}")).arg(format!("--user-data-dir={}", profile.display()));
-        Some((script, port))
-    } else { None };
     save(dir, &s)?;
     let mut child = cmd.spawn().map_err(|e| format!("无法启动客户端：{e}"))?;
     std::thread::sleep(Duration::from_millis(800));
     if let Some(status) = child.try_wait().map_err(|e| e.to_string())? { return Err(format!("客户端启动后提前退出：{status}。")); }
     std::thread::spawn(move || { let _ = child.wait(); });
-    if let Some((script, port)) = skin { wait_endpoint(port, Duration::from_secs(45))?; apply_skin(dir, &script, port)?; }
-    Ok(json!({"launched":true,"message":if s.dream_skin_compatible { "Codex 已按所选时区启动，Dream Skin 已应用皮肤。" } else { "Codex 已按所选时区启动（Dream Skin 兼容启动未开启）。" }}))
+    Ok(json!({"launched":true,"message":"Codex 已按所选时区启动。"}))
 }
 pub fn execute(command: &str, payload: Value) -> Result<Value, String> {
     let _runtime = Runtime::new()?;
@@ -262,9 +193,6 @@ pub fn execute(command: &str, payload: Value) -> Result<Value, String> {
         "save" => { save(&dir, &settings(&payload, &dir)?)?; Ok(json!({"path":dir.join("settings.json"),"message":format!("设置已保存到 {}", dir.join("settings.json").display())})) },
         "launch" => launch(&dir, settings(&payload, &dir)?),
         "create_shortcut" => Ok(json!({"created":true,"path":create_shortcut()?})),
-        "launch_dream_skin" | "launch_dream_skin_app" => {
-            let root = skin_root()?; let state = skin_state(&root)?; launch_dream_skin(&root, &state)
-        },
         _ => Err(format!("未知命令：{command}")),
     }
 }

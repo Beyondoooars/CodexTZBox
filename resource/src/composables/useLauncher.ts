@@ -9,7 +9,6 @@ const defaultSettings: Settings = {
   zoneId: 'Asia/Shanghai',
   offset: 8,
   executable: '',
-  dreamSkinCompatible: false,
 }
 
 function snapshot(settings: Settings) {
@@ -137,13 +136,11 @@ export function useLauncher() {
       save: '正在保存设置…',
       launch: '正在保存设置并启动 Codex…',
       create_shortcut: '正在创建桌面快捷方式…',
-      launch_dream_skin: '正在打开 Dream Skin…',
     }
     const fallback: Record<LauncherCommand, string> = {
       save: '设置已保存。',
       launch: 'Codex 已启动。',
       create_shortcut: '桌面快捷方式已创建。',
-      launch_dream_skin: 'Dream Skin 已打开。',
     }
     const submitted = cloneSettings(settings.value)
     busy.value = true

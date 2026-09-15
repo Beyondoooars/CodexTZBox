@@ -1,6 +1,6 @@
 export type AppearanceMode = 'system' | 'light' | 'dark'
 export type ResolvedAppearance = 'light' | 'dark'
-export type LauncherCommand = 'save' | 'launch' | 'create_shortcut' | 'launch_dream_skin'
+export type LauncherCommand = 'save' | 'launch' | 'create_shortcut'
 export type MessageKind = 'info' | 'success' | 'error' | 'pending'
 
 export type Zone = {
@@ -14,7 +14,6 @@ export type Settings = {
   zoneId: string
   offset: number
   executable: string
-  dreamSkinCompatible: boolean
 }
 
 export type Bootstrap = {
@@ -53,4 +52,5 @@ export type ClockValue = {
   time: string
   date: string
   offset: string
+  offsetMinutes: number
 }

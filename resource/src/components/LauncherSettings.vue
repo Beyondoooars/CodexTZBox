@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { MacButton, MacLabel, MacSegment, MacSegmentedControl, MacSwitch, MacTextField } from '@macvue/core'
+import { MacButton, MacLabel, MacSegment, MacSegmentedControl, MacTextField } from '@macvue/core'
 import type { Settings, Zone } from '../types'
 import { offsetText } from '../composables/useClocks'
 import AppIcon from './ui/AppIcon.vue'
@@ -23,7 +23,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:settings': [settings: Settings]
   browse: []
-  openSkin: []
   retry: []
 }>()
 
@@ -67,12 +66,14 @@ function setOffset(value: string | number) {
       <MacButton size="small" :disabled="initializing" @click="emit('retry')">重新读取</MacButton>
     </div>
 
+    <!-- 时区设置中枢 -->
     <div class="settings-section settings-section--first">
       <div class="section-heading">
-        <MacLabel id="settings-title" as="h2" variant="headline">时区设置</MacLabel>
-        <p>选择后，右侧时间预览会立即同步。</p>
+        <MacLabel id="settings-title" as="h2" variant="headline">时区核心配置</MacLabel>
+        <p>选择目标运行地区或自定义时差偏移，右侧仪表盘将实时同步。</p>
       </div>
-      <SettingRow label="设置方式">
+
+      <SettingRow label="模式选择">
         <MacSegmentedControl
           :model-value="settings.mode"
           type="single"
@@ -81,15 +82,15 @@ function setOffset(value: string | number) {
           :disabled="busy || initializing || bootstrapFailed"
           @update:model-value="setMode"
         >
-          <MacSegment value="zone">地区时区</MacSegment>
+          <MacSegment value="zone">全球标准地区时区</MacSegment>
           <MacSegment value="offset">固定 UTC 偏移</MacSegment>
         </MacSegmentedControl>
       </SettingRow>
 
       <SettingRow
         v-if="settings.mode === 'zone'"
-        label="时区名称"
-        description="按地区规则自动处理夏令时。"
+        label="目标时区"
+        description="按国际 IANA 规则全自动处理夏令时与冬令时切换。"
         :error="zoneError"
       >
         <AppSelect
@@ -98,49 +99,48 @@ function setOffset(value: string | number) {
           :disabled="busy || initializing || bootstrapFailed"
           teleport-to="#timezone-menu-root"
           accessible-name="时区名称"
-          :default-open="previewMenu === 'timezone'"
+          :force-open="previewMenu === 'timezone'"
           @update:model-value="setZone"
-        >
-          <template #value>{{ selectedZoneLabel }}</template>
-        </AppSelect>
+        />
+        <template #after>
+          <p class="current-selection-tip">当前选定：<strong>{{ selectedZoneLabel }}</strong></p>
+        </template>
       </SettingRow>
 
       <SettingRow
         v-else
-        label="UTC 固定偏移"
-        description="固定偏移不随季节变化；半小时和四十五分钟时区请使用地区时区。"
+        label="UTC 偏移量"
+        description="选择与世界协调时 (UTC) 的固定绝对时差（-12 至 +14 小时）。"
       >
         <AppSelect
           :model-value="settings.offset"
           :items="offsetItems"
           :disabled="busy || initializing || bootstrapFailed"
           teleport-to="#offset-menu-root"
-          accessible-name="UTC 固定偏移"
-          :default-open="previewMenu === 'offset'"
+          accessible-name="固定 UTC 偏移"
+          :force-open="previewMenu === 'offset'"
           @update:model-value="setOffset"
-        >
-          <template #value>{{ offsetText(settings.offset * 60) }}</template>
-        </AppSelect>
+        />
+        <div class="offset-summary">
+          <span>当前固定偏移</span>
+          <strong>{{ currentOffset }}</strong>
+        </div>
       </SettingRow>
-
-      <div class="offset-summary">
-        <span>当前 UTC 偏移</span>
-        <strong>{{ currentOffset }}</strong>
-      </div>
     </div>
 
+    <!-- 客户端应用关联 -->
     <div class="settings-section">
       <div class="section-heading">
-        <MacLabel as="h2" variant="headline">客户端设置</MacLabel>
-        <p>路径留空时使用自动查找结果。</p>
+        <MacLabel as="h2" variant="headline">Codex 客户端程序</MacLabel>
+        <p>支持 Microsoft Store (UWP) 自动探测或本地独立安装版路径。</p>
       </div>
-      <SettingRow label="客户端路径" field-id="client-path">
+
+      <SettingRow label="程序路径">
         <div class="path-row">
           <MacTextField
-            id="client-path"
             :model-value="settings.executable"
-            size="regular"
-            placeholder="留空时自动查找 Codex"
+            :placeholder="detected || '正在自动查找 Codex 桌面客户端…'"
+            aria-label="Codex 客户端路径"
             :disabled="busy || initializing || bootstrapFailed"
             @update:model-value="update({ executable: $event })"
           />
@@ -149,32 +149,26 @@ function setOffset(value: string | number) {
           </MacButton>
         </div>
         <template #after>
-          <p class="path-result" :class="{ 'path-result--warning': !detected && !settings.executable }">
-            {{ settings.executable ? `已选择：${settings.executable}` : detected ? `已自动找到：${detected}` : '未找到客户端，请选择程序路径。' }}
-          </p>
+          <div class="path-status-card" :class="{ 'path-status-card--found': detected || settings.executable, 'path-status-card--missing': !detected && !settings.executable }">
+            <AppIcon :name="detected || settings.executable ? 'check' : 'alert'" />
+            <div class="path-status-text">
+              <strong>{{ settings.executable ? '已指定自定义安装路径' : detected ? '已自动识别系统安装版本' : '未检测到客户端' }}</strong>
+              <small>{{ settings.executable || detected || '请点击右侧“浏览”手动指定 Codex.exe 或 ChatGPT.exe 安装路径。' }}</small>
+            </div>
+          </div>
         </template>
       </SettingRow>
-    </div>
 
-    <div class="settings-section dream-skin-section">
-      <div class="section-heading dream-skin-heading">
-        <div>
-          <MacLabel as="h2" variant="headline">Dream Skin 兼容启动</MacLabel>
-          <p>适用于 Windows 客户端。</p>
+      <!-- 系统托盘驻留提示卡片 -->
+      <div class="tray-tip-card">
+        <div class="tray-tip-icon">
+          <AppIcon name="info" />
         </div>
-        <MacSwitch
-          :model-value="settings.dreamSkinCompatible"
-          aria-label="Dream Skin 兼容启动"
-          :disabled="busy || initializing || bootstrapFailed"
-          @update:model-value="update({ dreamSkinCompatible: $event })"
-        />
+        <div class="tray-tip-content">
+          <strong>系统托盘常驻已就绪</strong>
+          <p>点击窗口右上角关闭按钮将自动隐藏到 Windows 任务栏右下角托盘；随时右键托盘图标可一键快启或退出。</p>
+        </div>
       </div>
-      <p class="skin-description">
-        {{ settings.dreamSkinCompatible
-          ? '启动时将应用并验证皮肤；已运行的客户端需完全退出后重启。'
-          : '开启后，使用兼容模式启动 Codex 并按现有流程应用皮肤。' }}
-      </p>
-      <MacButton :disabled="busy || initializing || bootstrapFailed || previewMode" title="开发预览不执行原生操作" @click="emit('openSkin')">打开 Dream Skin</MacButton>
     </div>
   </section>
 </template>

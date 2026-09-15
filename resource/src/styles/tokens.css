@@ -1,31 +1,40 @@
 :root,
 :root[data-macvue-appearance='light'] {
-  --app-bg: #f5f5f7;
-  --app-surface: #ffffff;
-  --app-surface-muted: #f0f0f2;
-  --app-text: #1d1d1f;
-  --app-text-secondary: #626267;
-  --app-separator: rgba(60, 60, 67, 0.18);
-  --app-accent: #0066cc;
-  --app-success: #237a3b;
-  --app-warning: #8a5900;
-  --app-danger: #b42318;
-  --app-toolbar: rgba(255, 255, 255, 0.9);
-  --app-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --app-bg: #f4f6f9;
+  --app-surface: rgba(255, 255, 255, 0.92);
+  --app-surface-muted: #eef2f6;
+  --app-surface-card: #ffffff;
+  --app-text: #1a1f2c;
+  --app-text-secondary: #5a6474;
+  --app-separator: rgba(0, 0, 0, 0.08);
+  --app-accent: #0284c7;
+  --app-accent-glow: rgba(2, 132, 199, 0.15);
+  --app-success: #16a34a;
+  --app-success-glow: rgba(22, 163, 74, 0.15);
+  --app-warning: #d97706;
+  --app-danger: #dc2626;
+  --app-toolbar: rgba(255, 255, 255, 0.88);
+  --app-shadow: 0 4px 16px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+  --app-shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.07);
   --macvue-accent: var(--app-accent);
 }
 
 :root[data-macvue-appearance='dark'] {
-  --app-bg: #1c1c1e;
-  --app-surface: #2c2c2e;
-  --app-surface-muted: #242426;
-  --app-text: #f5f5f7;
-  --app-text-secondary: #b5b5bc;
-  --app-separator: rgba(235, 235, 245, 0.18);
-  --app-accent: #5aa9ff;
-  --app-success: #73d38a;
-  --app-warning: #f0c36b;
-  --app-danger: #ff8a80;
-  --app-toolbar: rgba(44, 44, 46, 0.92);
-  --app-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --app-bg: #0f141c;
+  --app-surface: rgba(23, 29, 41, 0.88);
+  --app-surface-muted: #151b27;
+  --app-surface-card: #19202e;
+  --app-text: #f1f5f9;
+  --app-text-secondary: #94a3b8;
+  --app-separator: rgba(255, 255, 255, 0.09);
+  --app-accent: #38bdf8;
+  --app-accent-glow: rgba(56, 189, 248, 0.2);
+  --app-success: #4ade80;
+  --app-success-glow: rgba(74, 222, 128, 0.2);
+  --app-warning: #fbbf24;
+  --app-danger: #f87171;
+  --app-toolbar: rgba(15, 20, 28, 0.85);
+  --app-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15);
+  --app-shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --macvue-accent: var(--app-accent);
 }

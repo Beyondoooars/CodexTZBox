@@ -55,7 +55,6 @@ async function refreshNetwork() {
             :preview-mode="launcher.previewMode"
             @update:settings="updateSettings"
             @browse="launcher.browse"
-            @open-skin="launcher.action('launch_dream_skin')"
             @retry="launcher.initialize"
           />
           <TimePreview
