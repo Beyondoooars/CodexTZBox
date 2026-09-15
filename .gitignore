@@ -4,6 +4,7 @@ data/
 .env
 .env.*
 !.env.example
+.github/
 
 # 依赖、构建目录与本地缓存
 environment/
