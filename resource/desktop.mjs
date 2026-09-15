@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { copyFile, lstat } from 'node:fs/promises';
+import { copyFile, lstat, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -61,8 +61,35 @@ async function main() {
   await run(process.execPath, tauriArgs, env);
   if (action === 'build') {
     const release = join(env.CARGO_TARGET_DIR, 'release');
-    await copyFile(join(release, 'codextimezonerev.exe'), artifact);
+    const sourceExe = join(release, 'codextimezonerev.exe');
+
+    const copyWithLockRetry = async (target) => {
+      try {
+        await copyFile(sourceExe, target);
+      } catch (copyErr) {
+        if (copyErr.code === 'EBUSY' || copyErr.code === 'EPERM') {
+          console.log(`目标文件正在运行，正在关闭以更新：${target}…`);
+          await run('taskkill.exe', ['/F', '/IM', 'CodexTimeZoneLauncher.exe']).catch(() => {});
+          await new Promise(r => setTimeout(r, 500));
+          await copyFile(sourceExe, target);
+        } else {
+          throw copyErr;
+        }
+      }
+    };
+
+    await copyWithLockRetry(artifact);
     console.log(`已生成：${artifact}`);
+
+    const toolkitDir = process.env.CODEX_TOOLKIT_DIR || 'D:\\Toolkits\\CodexTZBox';
+    try {
+      await mkdir(toolkitDir, { recursive: true });
+      const toolkitArtifact = join(toolkitDir, 'CodexTimeZoneLauncher.exe');
+      await copyWithLockRetry(toolkitArtifact);
+      console.log(`已同步至工具箱：${toolkitArtifact}`);
+    } catch (err) {
+      console.error(`同步至工具箱失败：${err.message}`);
+    }
   }
 }
 

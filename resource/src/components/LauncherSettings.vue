@@ -158,17 +158,6 @@ function setOffset(value: string | number) {
           </div>
         </template>
       </SettingRow>
-
-      <!-- 系统托盘驻留提示卡片 -->
-      <div class="tray-tip-card">
-        <div class="tray-tip-icon">
-          <AppIcon name="info" />
-        </div>
-        <div class="tray-tip-content">
-          <strong>系统托盘常驻已就绪</strong>
-          <p>点击窗口右上角关闭按钮将自动隐藏到 Windows 任务栏右下角托盘；随时右键托盘图标可一键快启或退出。</p>
-        </div>
-      </div>
     </div>
   </section>
 </template>
