@@ -1,7 +1,7 @@
 use crate::common::{load, network_info, save, settings, tz, zones, Settings};
 use quick_xml::events::Event;
 use serde_json::{json, Value};
-use std::{fs, mem::size_of, os::windows::{ffi::OsStrExt, process::CommandExt}, path::{Path, PathBuf}, process::{Command, Stdio}, time::Duration};
+use std::{fs, mem::size_of, os::windows::ffi::OsStrExt, path::{Path, PathBuf}, process::{Command, Stdio}, time::Duration};
 use ::windows::{
     core::{w, GUID, HSTRING, Interface, PCWSTR, PWSTR},
     Management::Deployment::PackageManager,
@@ -37,22 +37,47 @@ fn known_folder(id: &GUID) -> Result<PathBuf, String> {
     }
 }
 fn wide(path: &Path) -> Vec<u16> { path.as_os_str().encode_wide().chain(Some(0)).collect() }
+fn clean_path(path: &Path) -> String {
+    path.to_string_lossy().trim_start_matches(r"\\?\").to_string()
+}
 fn data_directory() -> Result<PathBuf, String> {
     Ok(std::env::current_exe().map_err(|e| e.to_string())?.parent().ok_or("无法确定程序目录。")?.join("data"))
 }
 fn load_migrated(dir: &Path) -> Result<Settings, String> {
-    if dir.join("settings.json").exists() { return load(dir); }
-    let legacy = known_folder(&FOLDERID_LocalAppData)?.join("ChatGPTTimeZoneLauncher");
-    if legacy.join("settings.json").exists() {
-        if let Ok(s) = load(&legacy) { save(dir, &s)?; return Ok(s); }
+    let mut s = if dir.join("settings.json").exists() {
+        load(dir)?
+    } else {
+        let legacy = known_folder(&FOLDERID_LocalAppData)?.join("ChatGPTTimeZoneLauncher");
+        if legacy.join("settings.json").exists() {
+            if let Ok(legacy_settings) = load(&legacy) {
+                save(dir, &legacy_settings)?;
+                legacy_settings
+            } else {
+                Settings::default()
+            }
+        } else {
+            Settings::default()
+        }
+    };
+    if !s.executable.trim().is_empty() && validate(&s.executable).is_err() {
+        s.executable.clear();
+        let _ = save(dir, &s);
     }
-    Ok(Settings::default())
+    Ok(s)
 }
 fn validate(path: &str) -> Result<PathBuf, String> {
-    let path = fs::canonicalize(path.trim().trim_matches('"')).map_err(|_| "客户端路径不存在，请选择 Codex 桌面程序。")?;
+    let mut path = fs::canonicalize(path.trim().trim_matches('"')).map_err(|_| "客户端路径不存在，请选择 Codex 桌面程序。")?;
     let name = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
     if !path.is_file() || !["codex.exe", "chatgpt.exe"].contains(&name.as_str()) || !path.parent().ok_or("客户端目录无效")?.join("icudtl.dat").is_file() {
         return Err("请选择 Codex 桌面安装目录中的 Codex.exe / ChatGPT.exe，不要选择命令行程序。".into());
+    }
+    if name == "codex.exe" {
+        if let Some(parent) = path.parent() {
+            let chatgpt = parent.join("ChatGPT.exe");
+            if chatgpt.is_file() {
+                path = chatgpt;
+            }
+        }
     }
     Ok(path)
 }
@@ -107,11 +132,11 @@ fn discover() -> String {
     }
     candidates.sort_by(|a, b| b.0.cmp(&a.0));
     for (_, root) in candidates {
-        if let Some(path) = manifest_executable(&root) { return path.to_string_lossy().into_owned(); }
+        if let Some(path) = manifest_executable(&root) { return clean_path(&path); }
     }
     if let Ok(local) = known_folder(&FOLDERID_LocalAppData) {
         for relative in [r"Programs\Codex\Codex.exe", r"Codex\Codex.exe", r"Programs\OpenAI\Codex\Codex.exe"] {
-            if let Ok(path) = validate(&local.join(relative).to_string_lossy()) { return path.to_string_lossy().into_owned(); }
+            if let Ok(path) = validate(&local.join(relative).to_string_lossy()) { return clean_path(&path); }
         }
     }
     String::new()
@@ -134,11 +159,20 @@ fn is_running(executable: &Path) -> Result<bool, String> {
                 let mut candidate_session = 0;
                 if ProcessIdToSessionId(entry.th32ProcessID, &mut candidate_session).is_ok() && session == candidate_session {
                     let process = match OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, entry.th32ProcessID) {
-                        Ok(p) => Handle(p), Err(_) => return Ok(true),
+                        Ok(p) => Handle(p),
+                        Err(_) => {
+                            if Process32NextW(snapshot.0, &mut entry).is_err() { break; }
+                            continue;
+                        }
                     };
-                    let mut buffer = vec![0u16; 32768]; let mut length = buffer.len() as u32;
-                    if QueryFullProcessImageNameW(process.0, PROCESS_NAME_WIN32, PWSTR(buffer.as_mut_ptr()), &mut length).is_err() { return Ok(true); }
-                    if same_path(executable, &PathBuf::from(String::from_utf16_lossy(&buffer[..length as usize]))) { return Ok(true); }
+                    let mut buffer = vec![0u16; 32768];
+                    let mut length = buffer.len() as u32;
+                    if QueryFullProcessImageNameW(process.0, PROCESS_NAME_WIN32, PWSTR(buffer.as_mut_ptr()), &mut length).is_ok() {
+                        let proc_path = PathBuf::from(String::from_utf16_lossy(&buffer[..length as usize]));
+                        if same_path(executable, &proc_path) {
+                            return Ok(true);
+                        }
+                    }
                 }
             }
             if Process32NextW(snapshot.0, &mut entry).is_err() { break; }
@@ -173,8 +207,39 @@ pub fn launch(dir: &Path, s: Settings) -> Result<Value, String> {
     let path = validate(&if s.executable.trim().is_empty() { discover() } else { s.executable.clone() })?;
     if is_running(&path)? { return Err("客户端正在运行，请保存工作并完全退出 Codex 后重试。".into()); }
     let mut cmd = Command::new(&path);
-    cmd.env("TZ", tz(&s)?).env_remove("ELECTRON_RUN_AS_NODE").current_dir(path.parent().ok_or("客户端目录无效")?)
-        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).creation_flags(0x08000000);
+    cmd.env("TZ", tz(&s)?)
+        .env_remove("ELECTRON_RUN_AS_NODE")
+        .current_dir(path.parent().ok_or("客户端目录无效")?)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    // OpenAI Codex 26.924+ compatibility:
+    // When launched outside the MSIX sandbox container without package identity,
+    // Codex will throw APPMODEL_ERROR_NO_PACKAGE ("该进程没有程序包标识符")
+    // during updater initialization and core runtime resolution.
+    // 1) Set CODEX_SPARKLE_ENABLED="false" to disable store updater init.
+    // 2) Set CODEX_CLI_PATH to the bundled or local codex.exe CLI tool, which causes
+    //    Codex to skip package identity check and directly use the core CLI runtime.
+    cmd.env("CODEX_SPARKLE_ENABLED", "false");
+    if let Some(parent) = path.parent() {
+        let bundled_cli = parent.join("resources").join("codex.exe");
+        if bundled_cli.is_file() {
+            cmd.env("CODEX_CLI_PATH", bundled_cli);
+        } else if let Ok(local) = known_folder(&FOLDERID_LocalAppData) {
+            let user_cli_dir = local.join("OpenAI").join("Codex").join("bin");
+            if let Ok(entries) = fs::read_dir(&user_cli_dir) {
+                for entry in entries.flatten() {
+                    let candidate = entry.path().join("codex.exe");
+                    if candidate.is_file() {
+                        cmd.env("CODEX_CLI_PATH", candidate);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     save(dir, &s)?;
     let mut child = cmd.spawn().map_err(|e| format!("无法启动客户端：{e}"))?;
     std::thread::sleep(Duration::from_millis(800));
@@ -189,10 +254,11 @@ pub fn execute(command: &str, payload: Value) -> Result<Value, String> {
         "network_info" => network_info(),
         "bootstrap" => Ok(json!({"settings":load_migrated(&dir)?,"zones":zones(),"localZone":"UTC","detected":discover(),"platform":"windows","settingsPath":dir.join("settings.json")})),
         "discover" => Ok(json!({"path":discover()})),
-        "validate" => Ok(json!({"path":validate(payload["path"].as_str().unwrap_or_default())?})),
+        "validate" => Ok(json!({"path":clean_path(&validate(payload["path"].as_str().unwrap_or_default())?)})),
         "save" => { save(&dir, &settings(&payload, &dir)?)?; Ok(json!({"path":dir.join("settings.json"),"message":format!("设置已保存到 {}", dir.join("settings.json").display())})) },
         "launch" => launch(&dir, settings(&payload, &dir)?),
         "create_shortcut" => Ok(json!({"created":true,"path":create_shortcut()?})),
         _ => Err(format!("未知命令：{command}")),
     }
 }
+
