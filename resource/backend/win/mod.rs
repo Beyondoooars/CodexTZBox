@@ -1,31 +1,47 @@
-use crate::common::{load, network_info, save, settings, tz, zones, Settings};
+use crate::common::{load, save, settings, tz, zones, Settings};
 use quick_xml::events::Event;
 use serde_json::{json, Value};
-use std::{fs, mem::size_of, os::windows::ffi::OsStrExt, path::{Path, PathBuf}, process::{Command, Stdio}, time::Duration};
+use std::{fs, mem::size_of, path::{Path, PathBuf}, process::{Command, Stdio}, time::Duration};
 use ::windows::{
-    core::{w, GUID, HSTRING, Interface, PCWSTR, PWSTR},
+    core::{BOOL, GUID, HSTRING, PWSTR},
     Management::Deployment::PackageManager,
     Win32::{
-        Foundation::{CloseHandle, HANDLE},
+        Foundation::{CloseHandle, HANDLE, HWND, LPARAM, WPARAM},
         System::{
-            Com::{CoCreateInstance, CoTaskMemFree, IPersistFile, CLSCTX_INPROC_SERVER},
+            Com::CoTaskMemFree,
             Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS},
             RemoteDesktop::ProcessIdToSessionId,
             Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION},
             WinRT::{RoInitialize, RoUninitialize, RO_INIT_SINGLETHREADED},
         },
-        UI::Shell::{FOLDERID_Desktop, FOLDERID_LocalAppData, IShellLinkW, KF_FLAG_DEFAULT, SHGetKnownFolderPath, ShellLink},
+        UI::{
+            Shell::{FOLDERID_LocalAppData, KF_FLAG_DEFAULT, SHGetKnownFolderPath},
+            WindowsAndMessaging::{EnumWindows, GetWindowTextLengthW, GetWindowThreadProcessId, IsWindowVisible, PostMessageW, WM_CLOSE},
+        },
     },
 };
 
-struct Runtime;
+struct Runtime {
+    initialized: bool,
+}
 impl Runtime {
     fn new() -> Result<Self, String> {
-        unsafe { RoInitialize(RO_INIT_SINGLETHREADED) }.map_err(|e| e.to_string())?;
-        Ok(Self)
+        match unsafe { RoInitialize(RO_INIT_SINGLETHREADED) } {
+            Ok(_) => Ok(Self { initialized: true }),
+            Err(err) if err.code().0 == -2147417850 /* RPC_E_CHANGED_MODE: 0x80010106 */ => {
+                Ok(Self { initialized: false })
+            }
+            Err(err) => Err(format!("无法初始化系统运行时：{err}")),
+        }
     }
 }
-impl Drop for Runtime { fn drop(&mut self) { unsafe { RoUninitialize(); } } }
+impl Drop for Runtime {
+    fn drop(&mut self) {
+        if self.initialized {
+            unsafe { RoUninitialize(); }
+        }
+    }
+}
 struct Handle(HANDLE);
 impl Drop for Handle { fn drop(&mut self) { unsafe { let _ = CloseHandle(self.0); } } }
 fn known_folder(id: &GUID) -> Result<PathBuf, String> {
@@ -36,48 +52,63 @@ fn known_folder(id: &GUID) -> Result<PathBuf, String> {
         value.map(PathBuf::from)
     }
 }
-fn wide(path: &Path) -> Vec<u16> { path.as_os_str().encode_wide().chain(Some(0)).collect() }
 fn clean_path(path: &Path) -> String {
     path.to_string_lossy().trim_start_matches(r"\\?\").to_string()
 }
 fn data_directory() -> Result<PathBuf, String> {
-    Ok(std::env::current_exe().map_err(|e| e.to_string())?.parent().ok_or("无法确定程序目录。")?.join("data"))
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let portable_data = parent.join("data");
+            if fs::create_dir_all(&portable_data).is_ok() {
+                let test_file = portable_data.join(".write_test");
+                if fs::write(&test_file, b"ok").is_ok() {
+                    let _ = fs::remove_file(test_file);
+                    return Ok(portable_data);
+                }
+            }
+        }
+    }
+    if let Ok(local) = known_folder(&FOLDERID_LocalAppData) {
+        let fallback_data = local.join("CodexTZBox").join("data");
+        let _ = fs::create_dir_all(&fallback_data);
+        return Ok(fallback_data);
+    }
+    Err("无法确定可写的数据存储目录。".into())
 }
 fn load_migrated(dir: &Path) -> Result<Settings, String> {
-    let mut s = if dir.join("settings.json").exists() {
+    let s = if dir.join("settings.json").exists() {
         load(dir)?
     } else {
-        let legacy = known_folder(&FOLDERID_LocalAppData)?.join("ChatGPTTimeZoneLauncher");
-        if legacy.join("settings.json").exists() {
-            if let Ok(legacy_settings) = load(&legacy) {
+        let local = known_folder(&FOLDERID_LocalAppData)?;
+        let legacy = [
+            local.join("CodexTimeZoneSwitcher").join("data"),
+            local.join("ChatGPTTimeZoneLauncher"),
+        ]
+        .into_iter()
+        .find(|legacy_dir| legacy_dir.join("settings.json").exists());
+        match legacy.and_then(|legacy_dir| load(&legacy_dir).ok()) {
+            Some(legacy_settings) => {
                 save(dir, &legacy_settings)?;
                 legacy_settings
-            } else {
-                Settings::default()
             }
-        } else {
-            Settings::default()
+            None => Settings::default(),
         }
     };
-    if !s.executable.trim().is_empty() && validate(&s.executable).is_err() {
-        s.executable.clear();
-        let _ = save(dir, &s);
-    }
     Ok(s)
 }
 fn validate(path: &str) -> Result<PathBuf, String> {
-    let mut path = fs::canonicalize(path.trim().trim_matches('"')).map_err(|_| "客户端路径不存在，请选择 Codex 桌面程序。")?;
+    let path = fs::canonicalize(path.trim().trim_matches('"')).map_err(|_| "客户端路径不存在，请选择 Codex 桌面程序。")?;
     let name = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
-    if !path.is_file() || !["codex.exe", "chatgpt.exe"].contains(&name.as_str()) || !path.parent().ok_or("客户端目录无效")?.join("icudtl.dat").is_file() {
+    if !path.is_file() || !["codex.exe", "chatgpt.exe"].contains(&name.as_str()) {
         return Err("请选择 Codex 桌面安装目录中的 Codex.exe / ChatGPT.exe，不要选择命令行程序。".into());
     }
-    if name == "codex.exe" {
-        if let Some(parent) = path.parent() {
-            let chatgpt = parent.join("ChatGPT.exe");
-            if chatgpt.is_file() {
-                path = chatgpt;
-            }
-        }
+    let parent = path.parent().ok_or("客户端目录无效")?;
+    let has_resources = parent.join("icudtl.dat").is_file()
+        || parent.join("resources").join("icudtl.dat").is_file()
+        || parent.join("resources").join("app.asar").is_file()
+        || parent.join("resources").is_dir();
+    if !has_resources {
+        return Err("请选择 Codex 桌面安装目录中的 Codex.exe / ChatGPT.exe，不要选择命令行程序。".into());
     }
     Ok(path)
 }
@@ -89,19 +120,25 @@ fn manifest_executable(root: &Path) -> Option<PathBuf> {
     let mut executable_name = None;
     loop {
         match reader.read_event().ok()? {
-            Event::Start(element) if element.local_name().as_ref() == "Application" => {
+            Event::Start(element) | Event::Empty(element) if element.local_name().as_ref() == "Application" => {
                 let mut is_app = false;
                 let mut executable = None;
                 for attribute in element.attributes().flatten() {
                     match attribute.key.local_name().as_ref() {
-                        "Id" => is_app = attribute.value.as_ref() == "App",
+                        "Id" => {
+                            let val = attribute.value.as_ref();
+                            is_app = val == "App" || val.eq_ignore_ascii_case("OpenAI.Codex") || val.eq_ignore_ascii_case("OpenAICodex");
+                        }
                         "Executable" => executable = Some(attribute.value.into_owned()),
                         _ => {}
                     }
                 }
-                if is_app {
+                if is_app && executable.is_some() {
                     executable_name = executable;
                     break;
+                }
+                if executable_name.is_none() {
+                    executable_name = executable;
                 }
             }
             Event::Eof => break,
@@ -145,13 +182,14 @@ fn same_path(a: &Path, b: &Path) -> bool {
     let normalize = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()).to_string_lossy().trim_start_matches(r"\\?\").to_lowercase();
     normalize(a) == normalize(b)
 }
-fn is_running(executable: &Path) -> Result<bool, String> {
+fn running_client_pids(executable: &Path) -> Result<Vec<u32>, String> {
+    let mut pids = Vec::new();
     unsafe {
         let mut session = 0;
         ProcessIdToSessionId(std::process::id(), &mut session).map_err(|e| e.to_string())?;
         let snapshot = Handle(CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0).map_err(|e| e.to_string())?);
         let mut entry = PROCESSENTRY32W { dwSize: size_of::<PROCESSENTRY32W>() as u32, ..Default::default() };
-        if Process32FirstW(snapshot.0, &mut entry).is_err() { return Ok(false); }
+        if Process32FirstW(snapshot.0, &mut entry).is_err() { return Ok(pids); }
         loop {
             let end = entry.szExeFile.iter().position(|c| *c == 0).unwrap_or(entry.szExeFile.len());
             let name = String::from_utf16_lossy(&entry.szExeFile[..end]).to_lowercase();
@@ -169,50 +207,83 @@ fn is_running(executable: &Path) -> Result<bool, String> {
                     let mut length = buffer.len() as u32;
                     if QueryFullProcessImageNameW(process.0, PROCESS_NAME_WIN32, PWSTR(buffer.as_mut_ptr()), &mut length).is_ok() {
                         let proc_path = PathBuf::from(String::from_utf16_lossy(&buffer[..length as usize]));
-                        if same_path(executable, &proc_path) {
-                            return Ok(true);
-                        }
+                        let matched = same_path(executable, &proc_path) || (
+                            executable.parent().is_some() &&
+                            proc_path.parent().is_some() &&
+                            same_path(executable.parent().unwrap(), proc_path.parent().unwrap())
+                        );
+                        if matched { pids.push(entry.th32ProcessID); }
                     }
                 }
             }
             if Process32NextW(snapshot.0, &mut entry).is_err() { break; }
         }
     }
-    Ok(false)
+    Ok(pids)
 }
-fn create_shortcut() -> Result<PathBuf, String> {
-    let executable = std::env::current_exe().map_err(|e| e.to_string())?;
-    let desktop = known_folder(&FOLDERID_Desktop)?;
-    let path = desktop.join("Codex 时区启动器.lnk");
-    // Stage the COM-created shortcut before replacing the destination atomically.
-    let staging = tempfile::tempdir_in(&desktop).map_err(|e| e.to_string())?;
-    let staged = staging.path().join("launcher.lnk");
-    unsafe {
-        let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).map_err(|e| e.to_string())?;
-        link.SetPath(PCWSTR(wide(&executable).as_ptr())).map_err(|e| e.to_string())?;
-        link.SetWorkingDirectory(PCWSTR(wide(executable.parent().ok_or("程序目录无效")?).as_ptr())).map_err(|e| e.to_string())?;
-        link.SetDescription(w!("选择时区并启动 Codex")).map_err(|e| e.to_string())?;
-        link.SetIconLocation(PCWSTR(wide(&executable).as_ptr()), 0).map_err(|e| e.to_string())?;
-        let persist: IPersistFile = link.cast().map_err(|e| e.to_string())?;
-        persist.Save(PCWSTR(wide(&staged).as_ptr()), true).map_err(|e| e.to_string())?;
+fn is_running(executable: &Path) -> Result<bool, String> {
+    Ok(!running_client_pids(executable)?.is_empty())
+}
+fn request_graceful_exit(pids: &[u32]) {
+    struct State {
+        pids: Vec<u32>,
+        preferred: Vec<HWND>,
+        fallback: Vec<HWND>,
     }
-    let mut file = tempfile::NamedTempFile::new_in(&desktop).map_err(|e| e.to_string())?;
-    use std::io::Write;
-    file.write_all(&fs::read(staged).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
-    file.persist(&path).map_err(|e| e.to_string())?;
-    Ok(path)
+    unsafe extern "system" fn collect(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let state = unsafe { &mut *(lparam.0 as *mut State) };
+        let mut pid = 0u32;
+        unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)); }
+        if state.pids.contains(&pid) {
+            let visible = unsafe { IsWindowVisible(hwnd) }.as_bool();
+            let titled = unsafe { GetWindowTextLengthW(hwnd) } > 0;
+            if visible && titled { state.preferred.push(hwnd); } else { state.fallback.push(hwnd); }
+        }
+        BOOL(1)
+    }
+    let mut state = State { pids: pids.to_vec(), preferred: Vec::new(), fallback: Vec::new() };
+    unsafe {
+        let _ = EnumWindows(Some(collect), LPARAM(&mut state as *mut State as isize));
+    }
+    let targets = if state.preferred.is_empty() { &state.fallback } else { &state.preferred };
+    for hwnd in targets {
+        unsafe {
+            let _ = PostMessageW(Some(*hwnd), WM_CLOSE, WPARAM(0), LPARAM(0));
+        }
+    }
 }
-pub fn launch(dir: &Path, s: Settings) -> Result<Value, String> {
+fn wait_for_client_exit(executable: &Path, timeout: Duration) -> Result<bool, String> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if running_client_pids(executable)?.is_empty() { return Ok(true); }
+        if std::time::Instant::now() >= deadline { return Ok(false); }
+        std::thread::sleep(Duration::from_millis(400));
+    }
+}
+pub fn launch(dir: &Path, s: Settings, exit_running: bool) -> Result<Value, String> {
     tz(&s)?;
     let path = validate(&if s.executable.trim().is_empty() { discover() } else { s.executable.clone() })?;
-    if is_running(&path)? { return Err("客户端正在运行，请保存工作并完全退出 Codex 后重试。".into()); }
+    if is_running(&path)? {
+        if !exit_running {
+            return Ok(json!({
+                "launched": false,
+                "needsExitConfirm": true,
+                "message": "检测到 Codex 正在运行。需要请求其正常退出后重新启动吗？"
+            }));
+        }
+        let pids = running_client_pids(&path)?;
+        request_graceful_exit(&pids);
+        if !wait_for_client_exit(&path, Duration::from_secs(15))? {
+            return Err("Codex 未能在 15 秒内退出，请先在客户端中保存工作并手动完全退出后重试。".into());
+        }
+    }
     let mut cmd = Command::new(&path);
     cmd.env("TZ", tz(&s)?)
         .env_remove("ELECTRON_RUN_AS_NODE")
         .current_dir(path.parent().ok_or("客户端目录无效")?)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(Stdio::piped());
 
     // OpenAI Codex 26.924+ compatibility:
     // When launched outside the MSIX sandbox container without package identity,
@@ -227,13 +298,18 @@ pub fn launch(dir: &Path, s: Settings) -> Result<Value, String> {
         if bundled_cli.is_file() {
             cmd.env("CODEX_CLI_PATH", bundled_cli);
         } else if let Ok(local) = known_folder(&FOLDERID_LocalAppData) {
-            let user_cli_dir = local.join("OpenAI").join("Codex").join("bin");
-            if let Ok(entries) = fs::read_dir(&user_cli_dir) {
-                for entry in entries.flatten() {
-                    let candidate = entry.path().join("codex.exe");
-                    if candidate.is_file() {
-                        cmd.env("CODEX_CLI_PATH", candidate);
-                        break;
+            let direct_cli = local.join("OpenAI").join("Codex").join("bin").join("codex.exe");
+            if direct_cli.is_file() {
+                cmd.env("CODEX_CLI_PATH", direct_cli);
+            } else {
+                let user_cli_dir = local.join("OpenAI").join("Codex").join("bin");
+                if let Ok(entries) = fs::read_dir(&user_cli_dir) {
+                    for entry in entries.flatten() {
+                        let candidate = entry.path().join("codex.exe");
+                        if candidate.is_file() {
+                            cmd.env("CODEX_CLI_PATH", candidate);
+                            break;
+                        }
                     }
                 }
             }
@@ -243,21 +319,37 @@ pub fn launch(dir: &Path, s: Settings) -> Result<Value, String> {
     save(dir, &s)?;
     let mut child = cmd.spawn().map_err(|e| format!("无法启动客户端：{e}"))?;
     std::thread::sleep(Duration::from_millis(800));
-    if let Some(status) = child.try_wait().map_err(|e| e.to_string())? { return Err(format!("客户端启动后提前退出：{status}。")); }
-    std::thread::spawn(move || { let _ = child.wait(); });
+    if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+        if !status.success() {
+            let mut err_msg = String::new();
+            if let Some(mut err_pipe) = child.stderr.take() {
+                use std::io::Read;
+                let mut buf = Vec::new();
+                let _ = err_pipe.read_to_end(&mut buf);
+                let text = String::from_utf8_lossy(&buf).trim().to_string();
+                if !text.is_empty() {
+                    err_msg = format!("：{text}");
+                }
+            }
+            return Err(format!("客户端启动后异常退出 ({status}){err_msg}"));
+        }
+    }
     Ok(json!({"launched":true,"message":"Codex 已按所选时区启动。"}))
 }
 pub fn execute(command: &str, payload: Value) -> Result<Value, String> {
     let _runtime = Runtime::new()?;
     let dir = data_directory()?;
     match command {
-        "network_info" => network_info(),
-        "bootstrap" => Ok(json!({"settings":load_migrated(&dir)?,"zones":zones(),"localZone":"UTC","detected":discover(),"platform":"windows","settingsPath":dir.join("settings.json")})),
+        // 已保存客户端路径时跳过整机应用包扫描，缩短启动到可用的时间；未配置或路径为空时再探测。
+        "bootstrap" => {
+            let settings = load_migrated(&dir)?;
+            let detected = if settings.executable.trim().is_empty() { discover() } else { String::new() };
+            Ok(json!({"settings":settings,"zones":zones(),"localZone":"UTC","detected":detected,"settingsPath":dir.join("settings.json")}))
+        },
         "discover" => Ok(json!({"path":discover()})),
         "validate" => Ok(json!({"path":clean_path(&validate(payload["path"].as_str().unwrap_or_default())?)})),
         "save" => { save(&dir, &settings(&payload, &dir)?)?; Ok(json!({"path":dir.join("settings.json"),"message":format!("设置已保存到 {}", dir.join("settings.json").display())})) },
-        "launch" => launch(&dir, settings(&payload, &dir)?),
-        "create_shortcut" => Ok(json!({"created":true,"path":create_shortcut()?})),
+        "launch" => launch(&dir, settings(&payload, &dir)?, payload["exitRunning"].as_bool().unwrap_or(false)),
         _ => Err(format!("未知命令：{command}")),
     }
 }

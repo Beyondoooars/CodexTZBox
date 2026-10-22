@@ -2,31 +2,32 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager'
 import type { IpInfo, NetworkInfo } from '../types'
 
-const networkCacheKey = 'codex-timezone-network-v1'
+const networkCacheKey = 'codextzbox-network-v1'
 type RegionKey = 'domestic' | 'international'
 type IpProvider = { name: string; url: string; parse: (text: string) => string | undefined }
 
 const textIp = (text: string) => text.trim().match(/^(?:\(?\s*)?(?:ip\s*[=:]\s*)?([0-9a-f:.]+)(?:\s*\)?)$/i)?.[1]
 const jsonIp = (text: string) => {
   try {
-    const value = JSON.parse(text.replace(/^\s*\(/, '').replace(/\)\s*$/, '')) as Record<string, unknown>
-    return typeof value.ip === 'string' ? value.ip : undefined
+    const value = JSON.parse(text.replace(/^\s*\(/, '').replace(/\)\s*$/, '')) as Record<string, any>
+    const candidate = value?.data?.ip || value?.ip || value?.addr || value?.query || value?.origin || value?.ip_addr
+    return typeof candidate === 'string' ? candidate.split(',')[0].trim() : undefined
   } catch { return undefined }
 }
 const traceIp = (text: string) => text.split(/\r?\n/).find((line) => line.startsWith('ip='))?.slice(3).trim()
 
 const domesticProviders: IpProvider[] = [
-  { name: '腾讯', url: 'https://r.inews.qq.com/api/ip2city?otype=jsonp', parse: jsonIp },
   { name: 'IPIP.net', url: 'https://myip.ipip.net/json', parse: jsonIp },
-  { name: '又拍云', url: `https://pubstatic.b0.upaiyun.com/?_upnode&_t=${Date.now()}`, parse: textIp },
   { name: 'Cloudflare CN', url: 'https://www.cloudflare-cn.com/cdn-cgi/trace', parse: traceIp },
+  { name: '腾讯', url: 'https://r.inews.qq.com/api/ip2city?otype=jsonp', parse: jsonIp },
+  { name: '又拍云', url: `https://pubstatic.b0.upaiyun.com/?_upnode&_t=${Date.now()}`, parse: jsonIp },
 ]
 const internationalProviders: IpProvider[] = [
-  { name: 'AWS', url: 'https://checkip.amazonaws.com/', parse: textIp },
+  { name: 'IP.SB', url: 'https://api.ip.sb/geoip', parse: jsonIp },
   { name: 'Cloudflare Workers', url: 'https://workers.dev/cdn-cgi/trace', parse: traceIp },
   { name: 'Cloudflare US IPv4', url: 'https://1.0.0.1/cdn-cgi/trace', parse: traceIp },
+  { name: 'AWS', url: 'https://checkip.amazonaws.com/', parse: textIp },
   { name: 'IPify IPv4', url: 'https://api4.ipify.org?format=json', parse: jsonIp },
-  { name: 'IP.SB', url: 'https://api.ip.sb/geoip', parse: jsonIp },
 ]
 
 async function fetchProvider(provider: IpProvider, controller: AbortController) {
@@ -43,20 +44,42 @@ async function fetchProvider(provider: IpProvider, controller: AbortController) 
 async function fetchGeo(ip: string, source: string, controller: AbortController): Promise<IpInfo> {
   const timer = window.setTimeout(() => controller.abort(), 9000)
   try {
-    const response = await fetch(`https://ip125.com/api/geo/${encodeURIComponent(ip)}`, { cache: 'no-store', signal: controller.signal })
-    if (!response.ok) throw new Error(`IP125 归属地服务返回 HTTP ${response.status}`)
-    const value = await response.json() as Record<string, unknown>
-    const timezone = typeof value.timezone === 'string' ? value.timezone : ''
-    if (value.status !== 'success' || !timezone) throw new Error('IP125 未返回完整归属地')
+    try {
+      const response = await fetch(`https://ip125.com/api/geo/${encodeURIComponent(ip)}`, { cache: 'no-store', signal: controller.signal })
+      if (response.ok) {
+        const value = await response.json() as Record<string, unknown>
+        const timezone = typeof value.timezone === 'string' ? value.timezone : ''
+        if (value.status === 'success' && timezone) {
+          return {
+            ip,
+            timezone,
+            city: typeof value.city === 'string' ? value.city : undefined,
+            region: typeof value.regionName === 'string' ? value.regionName : undefined,
+            country: typeof value.country === 'string' ? value.country : undefined,
+            countryCode: typeof value.countryCode === 'string' ? value.countryCode : undefined,
+            organization: typeof value.org === 'string' ? value.org : (typeof value.isp === 'string' ? value.isp : undefined),
+            source,
+          }
+        }
+      }
+    } catch {
+      // Fallback to secondary geo service
+    }
+
+    const fallbackRes = await fetch(`https://api.ip.sb/geoip/${encodeURIComponent(ip)}`, { cache: 'no-store', signal: controller.signal })
+    if (!fallbackRes.ok) throw new Error(`归属地服务返回 HTTP ${fallbackRes.status}`)
+    const fallbackValue = await fallbackRes.json() as Record<string, unknown>
+    const timezone = typeof fallbackValue.timezone === 'string' ? fallbackValue.timezone : ''
+    if (!timezone) throw new Error('未返回有效时区')
     return {
       ip,
       timezone,
-      city: typeof value.city === 'string' ? value.city : undefined,
-      region: typeof value.regionName === 'string' ? value.regionName : undefined,
-      country: typeof value.country === 'string' ? value.country : undefined,
-      countryCode: typeof value.countryCode === 'string' ? value.countryCode : undefined,
-      organization: typeof value.org === 'string' ? value.org : (typeof value.isp === 'string' ? value.isp : undefined),
-      source,
+      city: typeof fallbackValue.city === 'string' ? fallbackValue.city : undefined,
+      region: typeof fallbackValue.region === 'string' ? fallbackValue.region : undefined,
+      country: typeof fallbackValue.country === 'string' ? fallbackValue.country : undefined,
+      countryCode: typeof fallbackValue.country_code === 'string' ? fallbackValue.country_code : undefined,
+      organization: typeof fallbackValue.organization === 'string' ? fallbackValue.organization : (typeof fallbackValue.isp === 'string' ? fallbackValue.isp : undefined),
+      source: `${source} / IP.SB`,
     }
   } finally { window.clearTimeout(timer) }
 }
@@ -137,6 +160,12 @@ export function useNetworkInfo() {
     return loadNetwork(false)
   }
 
+  // 懒加载：仅在首次展开面板且尚无数据（含缓存）时探测一次，避免每次启动发请求。
+  function ensureLoaded() {
+    if (previewMode || networkBusy.value || network.value) return
+    return loadNetwork(true)
+  }
+
   async function copyIp(key: RegionKey, ip: string) {
     window.clearTimeout(copyTimers[key])
     try {
@@ -181,9 +210,8 @@ export function useNetworkInfo() {
       return
     }
     readNetworkCache()
-    void loadNetwork(true)
   })
   onBeforeUnmount(() => Object.values(copyTimers).forEach((timer) => window.clearTimeout(timer)))
 
-  return { network, networkBusy, hasCachedNetwork, copyFeedback, copyErrors, refreshNetwork, copyIp }
+  return { network, networkBusy, hasCachedNetwork, copyFeedback, copyErrors, refreshNetwork, ensureLoaded, copyIp }
 }

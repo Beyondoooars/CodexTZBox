@@ -14,7 +14,7 @@ defineProps<{
   launchUnavailableReason: string
   previewMode: boolean
 }>()
-const emit = defineEmits<{ save: []; launch: []; shortcut: [] }>()
+const emit = defineEmits<{ save: []; launch: [] }>()
 const showDetail = ref(false)
 </script>
 
@@ -30,33 +30,34 @@ const showDetail = ref(false)
         >
           <MacSpinner v-if="message.kind === 'pending'" size="small" />
           <AppIcon v-else :name="message.kind === 'error' ? 'alert' : message.kind === 'success' ? 'check' : 'info'" />
-          <span>{{ dirty ? '有未保存修改 · ' : '' }}{{ message.summary }}</span>
+          <span class="status-summary-text">{{ dirty ? '有未保存修改 · ' : '' }}{{ message.summary }}</span>
           <button v-if="message.detail" class="detail-toggle" type="button" @click="showDetail = !showDetail">
             {{ showDetail ? '收起详情' : '查看详情' }}
           </button>
         </div>
         <div v-if="showDetail && message.detail" class="status-detail">{{ message.detail }}</div>
-        <p class="running-tip">提示：启动成功后将自动最小化至托盘；点击窗口右上角关闭也可常驻托盘。</p>
       </div>
+
       <div class="launch-actions">
-        <div class="primary-actions">
-          <MacButton :disabled="busy || initializing || bootstrapFailed || previewMode" title="开发预览不执行保存" @click="emit('save')">
-            <MacSpinner v-if="busyCommand === 'save'" size="small" />
-            {{ busyCommand === 'save' ? '正在保存…' : '保存设置' }}
-          </MacButton>
-          <MacButton
-            size="large"
-            variant="prominent"
-            :disabled="busy || initializing || bootstrapFailed || previewMode || Boolean(launchUnavailableReason)"
-            :title="previewMode ? '开发预览不执行启动' : launchUnavailableReason || '保存设置并启动 Codex'"
-            @click="emit('launch')"
-          >
-            <MacSpinner v-if="busyCommand === 'launch'" size="small" />
-            {{ busyCommand === 'launch' ? '正在启动…' : '保存并启动 Codex' }}
-          </MacButton>
-        </div>
-        <MacButton size="small" :disabled="busy || initializing || bootstrapFailed || previewMode" title="开发预览不创建快捷方式" @click="emit('shortcut')">
-          创建桌面快捷方式
+        <MacButton
+          size="regular"
+          :disabled="busy || initializing || bootstrapFailed || previewMode || !dirty"
+          title="保存当前时区与客户端设置"
+          @click="emit('save')"
+        >
+          <MacSpinner v-if="busyCommand === 'save'" size="small" />
+          {{ busyCommand === 'save' ? '正在保存…' : '保存' }}
+        </MacButton>
+
+        <MacButton
+          size="regular"
+          variant="prominent"
+          :disabled="busy || initializing || bootstrapFailed || previewMode || Boolean(launchUnavailableReason)"
+          :title="previewMode ? '开发预览不执行启动' : launchUnavailableReason || '保存设置并启动 Codex'"
+          @click="emit('launch')"
+        >
+          <MacSpinner v-if="busyCommand === 'launch'" size="small" />
+          {{ busyCommand === 'launch' ? '正在启动…' : '保存并启动 Codex' }}
         </MacButton>
       </div>
     </div>

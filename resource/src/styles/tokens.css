@@ -1,40 +1,69 @@
 :root,
 :root[data-macvue-appearance='light'] {
-  --app-bg: #f4f6f9;
-  --app-surface: rgba(255, 255, 255, 0.92);
-  --app-surface-muted: #eef2f6;
-  --app-surface-card: #ffffff;
-  --app-text: #1a1f2c;
-  --app-text-secondary: #5a6474;
-  --app-separator: rgba(0, 0, 0, 0.08);
-  --app-accent: #0284c7;
-  --app-accent-glow: rgba(2, 132, 199, 0.15);
-  --app-success: #16a34a;
-  --app-success-glow: rgba(22, 163, 74, 0.15);
-  --app-warning: #d97706;
-  --app-danger: #dc2626;
-  --app-toolbar: rgba(255, 255, 255, 0.88);
-  --app-shadow: 0 4px 16px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
-  --app-shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.07);
+  /* 纸面与墨色 */
+  --app-bg: #f6f4f0;
+  --app-surface: #fffefb;
+  --app-surface-card: #fffefb;
+  --app-surface-muted: #efebe4;
+  --app-text: #1c2128;
+  --app-text-secondary: #6b6f76;
+  --app-separator: #e2ddd4;
+  --app-hairline: #ece8e1;
+
+  /* 强调色：墨蓝，只用在目标时区与主操作 */
+  --app-accent: #24506b;
+  --app-accent-strong: #1a3d53;
+  --app-accent-glow: rgba(36, 80, 107, 0.1);
+  --app-success: #3f7a5a;
+  --app-success-glow: rgba(63, 122, 90, 0.12);
+  --app-warning: #a8762c;
+  --app-danger: #a33d33;
+
+  --app-toolbar: rgba(246, 244, 240, 0.9);
+  --app-shadow: 0 1px 2px rgba(28, 33, 40, 0.04);
+  --app-shadow-lg: 0 24px 60px -24px rgba(28, 33, 40, 0.22);
+
+  /* MacVue 组件跟随同一套色 */
   --macvue-accent: var(--app-accent);
+  --macvue-ref-blue: var(--app-accent);
+  --macvue-button-bg-prominent: var(--app-accent);
+  --macvue-button-bg-prominent-pressed: var(--app-accent-strong);
+  --macvue-label-on-accent: #fffefb;
+
+  /* 排版 */
+  --app-font: 'Iowan Old Style', 'Palatino Linotype', 'Source Han Serif SC', 'Songti SC', 'Noto Serif CJK SC', serif;
+  --app-font-ui: -apple-system, 'SF Pro Text', 'Segoe UI Variable', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
+  --app-font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Consolas, monospace;
+
+  --app-radius: 4px;
+  --app-radius-lg: 8px;
 }
 
 :root[data-macvue-appearance='dark'] {
-  --app-bg: #0f141c;
-  --app-surface: rgba(23, 29, 41, 0.88);
-  --app-surface-muted: #151b27;
-  --app-surface-card: #19202e;
-  --app-text: #f1f5f9;
-  --app-text-secondary: #94a3b8;
-  --app-separator: rgba(255, 255, 255, 0.09);
-  --app-accent: #38bdf8;
-  --app-accent-glow: rgba(56, 189, 248, 0.2);
-  --app-success: #4ade80;
-  --app-success-glow: rgba(74, 222, 128, 0.2);
-  --app-warning: #fbbf24;
-  --app-danger: #f87171;
-  --app-toolbar: rgba(15, 20, 28, 0.85);
-  --app-shadow: 0 4px 16px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.15);
-  --app-shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --app-bg: #16181c;
+  --app-surface: #1d2025;
+  --app-surface-card: #1d2025;
+  --app-surface-muted: #24272d;
+  --app-text: #ece9e3;
+  --app-text-secondary: #9a9fa7;
+  --app-separator: #30343b;
+  --app-hairline: #2a2e34;
+
+  --app-accent: #7fb2cf;
+  --app-accent-strong: #a3cbe2;
+  --app-accent-glow: rgba(127, 178, 207, 0.14);
+  --app-success: #7cba96;
+  --app-success-glow: rgba(124, 186, 150, 0.16);
+  --app-warning: #d6a862;
+  --app-danger: #e08a7f;
+
+  --app-toolbar: rgba(22, 24, 28, 0.9);
+  --app-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --app-shadow-lg: 0 24px 60px -24px rgba(0, 0, 0, 0.6);
+
   --macvue-accent: var(--app-accent);
+  --macvue-ref-blue: var(--app-accent);
+  --macvue-button-bg-prominent: var(--app-accent);
+  --macvue-button-bg-prominent-pressed: var(--app-accent-strong);
+  --macvue-label-on-accent: #16181c;
 }

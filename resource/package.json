@@ -1,5 +1,5 @@
 {
-  "name": "codextimezonerev",
+  "name": "codextzbox",
   "private": true,
   "version": "0.1.3",
   "type": "module",
@@ -20,7 +20,6 @@
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-clipboard-manager": "2.3.3",
     "@tauri-apps/plugin-dialog": "2.7.3",
-    "@tauri-apps/plugin-opener": "2.5.5",
     "vue": "3.5.42"
   },
   "devDependencies": {

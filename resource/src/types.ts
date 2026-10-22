@@ -1,6 +1,4 @@
-export type AppearanceMode = 'system' | 'light' | 'dark'
-export type ResolvedAppearance = 'light' | 'dark'
-export type LauncherCommand = 'save' | 'launch' | 'create_shortcut'
+export type LauncherCommand = 'save' | 'launch'
 export type MessageKind = 'info' | 'success' | 'error' | 'pending'
 
 export type Zone = {
@@ -21,7 +19,6 @@ export type Bootstrap = {
   zones: Zone[]
   localZone: string
   detected: string
-  platform?: string
   settingsPath?: string
 }
 

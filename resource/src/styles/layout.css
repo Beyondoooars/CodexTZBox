@@ -14,7 +14,7 @@
   position: relative;
   z-index: 10;
   background: var(--app-toolbar);
-  backdrop-filter: saturate(150%) blur(16px);
+  backdrop-filter: saturate(130%) blur(14px);
 }
 
 .app-toolbar {
@@ -28,21 +28,21 @@
 .toolbar-inner,
 .launch-bar-inner,
 .workspace-content {
-  width: min(1180px, calc(100% - 48px));
+  width: min(700px, calc(100% - 48px));
   margin-inline: auto;
 }
 
 .toolbar-inner {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
-  gap: 16px;
-  min-height: 64px;
+  min-height: 58px;
+  gap: 12px;
 }
 
 .workspace-scroll {
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-gutter: stable;
 }
 
@@ -51,128 +51,46 @@
 }
 
 .workspace-content {
-  padding-block: 20px 24px;
+  padding-block: 22px 26px;
 }
 
-.primary-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
-  gap: 24px;
-  align-items: start;
+.main-stack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
-.network-panel {
-  grid-column: 1 / -1;
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .launch-bar-inner {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
-  gap: 16px 24px;
-  min-height: 92px;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 62px;
   padding-block: 10px;
 }
 
-@media (max-width: 999px) {
-  .toolbar-inner,
-  .launch-bar-inner,
-  .workspace-content {
-    width: min(100% - 40px, 780px);
-  }
-
-  .primary-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .network-panel {
-    grid-column: auto;
-  }
-
-  .preview-panel {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-  }
-
-  .preview-panel > .section-heading {
-    grid-column: 1 / -1;
-  }
-
-  .clock-block--local {
-    border-top: 0;
-    border-left: 1px solid var(--app-separator);
-    padding-top: 0;
-    padding-left: 16px;
-  }
-}
-
-@media (max-width: 759px) {
+@media (max-width: 600px) {
   .toolbar-inner,
   .launch-bar-inner,
   .workspace-content {
     width: calc(100% - 32px);
   }
 
-  .toolbar-inner {
-    grid-template-columns: auto minmax(0, 1fr);
-    padding-block: 10px;
-  }
-
-  .toolbar-appearance {
-    grid-column: 1 / -1;
-  }
-
-  .workspace-content {
-    padding-block: 16px;
-  }
-
-  .primary-grid {
-    gap: 16px;
-  }
-
-  .preview-panel,
-  .network-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .preview-panel > .section-heading {
-    grid-column: auto;
-  }
-
-  .clock-block--local {
-    border-top: 1px solid var(--app-separator);
-    border-left: 0;
-    padding-top: 16px;
-    padding-left: 0;
-  }
-
-  .network-region + .network-region {
-    border-top: 1px solid var(--app-separator);
-    border-left: 0;
-    padding-top: 20px;
-    padding-left: 0;
-  }
-
   .launch-bar-inner {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
+    flex-direction: column;
+    align-items: stretch;
+    min-height: auto;
+    gap: 10px;
+    padding-block: 12px;
   }
 
   .launch-actions {
-    align-items: stretch;
-  }
-}
-
-@media (max-width: 520px) {
-  .path-row,
-  .panel-heading,
-  .dream-skin-heading {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .primary-actions {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    justify-content: flex-end;
   }
 }

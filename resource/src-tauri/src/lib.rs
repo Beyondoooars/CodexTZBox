@@ -2,7 +2,7 @@ use serde_json::{json, Value};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager,
+    AppHandle, Emitter, Manager,
 };
 
 #[path = "../../backend/common.rs"]
@@ -35,13 +35,62 @@ async fn backend(app: AppHandle, command: String, payload: Option<Value>) -> Res
     Ok(result)
 }
 
+use ::windows::{
+    core::w,
+    Win32::{
+        Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, HANDLE},
+        System::Threading::{
+            CreateEventW, CreateMutexW, OpenEventW, SetEvent, WaitForSingleObject,
+            EVENT_MODIFY_STATE, INFINITE,
+        },
+    },
+};
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Single instance protection:
+    // If another instance of CodexTZBox is already running,
+    // signal its wake event to bring its window to front, then exit immediately.
+    unsafe {
+        let mutex = CreateMutexW(None, true, w!("Local\\CodexTZBox_SingleInstance_Mutex"));
+        if GetLastError() == ERROR_ALREADY_EXISTS {
+            if let Ok(event) = OpenEventW(EVENT_MODIFY_STATE, false, w!("Local\\CodexTZBox_WakeUp_Event")) {
+                let _ = SetEvent(event);
+                let _ = CloseHandle(event);
+            }
+            if let Ok(m) = mutex {
+                let _ = CloseHandle(m);
+            }
+            std::process::exit(0);
+        }
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // Background listener for single-instance wake event
+            if let Ok(wake_event) = unsafe { CreateEventW(None, false, false, w!("Local\\CodexTZBox_WakeUp_Event")) } {
+                let handle_raw = wake_event.0 as usize;
+                let app_handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    let event = HANDLE(handle_raw as *mut _);
+                    loop {
+                        let wait_res = unsafe { WaitForSingleObject(event, INFINITE) };
+                        if wait_res.0 == 0 {
+                            if let Some(window) = app_handle.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.unminimize();
+                                let _ = window.set_focus();
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    unsafe { let _ = CloseHandle(event); }
+                });
+            }
+
             let show_item = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
             let launch_item = MenuItem::with_id(app, "launch", "保存并启动 Codex", true, None::<&str>)?;
             let sep = PredefinedMenuItem::separator(app)?;
@@ -50,7 +99,7 @@ pub fn run() {
 
             let mut builder = TrayIconBuilder::new()
                 .menu(&menu)
-                .tooltip("Codex 时区启动器")
+                .tooltip("Codex 时区沙盒")
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| {
                     match event.id.as_ref() {
@@ -65,16 +114,28 @@ pub fn run() {
                             let app_clone = app.clone();
                             tauri::async_runtime::spawn_blocking(move || {
                                 match call_backend_sync(app_clone.clone(), "launch".into(), json!({})) {
-                                    Ok(_) => {
-                                        if let Some(window) = app_clone.get_webview_window("main") {
-                                            let _ = window.hide();
+                                    Ok(result) => {
+                                        if result["launched"].as_bool().unwrap_or(false) {
+                                            if let Some(window) = app_clone.get_webview_window("main") {
+                                                let _ = window.hide();
+                                            }
+                                        } else {
+                                            // 客户端正在运行：把窗口带到前台，交由前端询问是否重启。
+                                            let message = result["message"].as_str().unwrap_or("检测到 Codex 正在运行。").to_string();
+                                            if let Some(window) = app_clone.get_webview_window("main") {
+                                                let _ = window.show();
+                                                let _ = window.unminimize();
+                                                let _ = window.set_focus();
+                                            }
+                                            let _ = app_clone.emit("tray-launch-running", message);
                                         }
                                     }
-                                    Err(_) => {
+                                    Err(err) => {
                                         if let Some(window) = app_clone.get_webview_window("main") {
                                             let _ = window.show();
                                             let _ = window.unminimize();
                                             let _ = window.set_focus();
+                                            let _ = window.emit("tray-launch-error", err);
                                         }
                                     }
                                 }

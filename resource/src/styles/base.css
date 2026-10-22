@@ -1,7 +1,8 @@
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI Variable', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
+  font-family: var(--app-font-ui);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 * {
@@ -21,6 +22,10 @@ body {
   overflow: hidden;
   color: var(--app-text);
   background: var(--app-bg);
+  font-family: var(--app-font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
 }
 
 button,
@@ -31,7 +36,8 @@ input {
 button:focus-visible,
 input:focus-visible,
 [role='button']:focus-visible,
-[role='radio']:focus-visible {
+[role='radio']:focus-visible,
+[role='combobox']:focus-visible {
   outline: 2px solid var(--app-accent);
   outline-offset: 2px;
 }
@@ -58,7 +64,6 @@ input:focus-visible,
 }
 
 @media (forced-colors: active) {
-  .surface,
   .app-toolbar,
   .launch-bar {
     border-color: CanvasText;

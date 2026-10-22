@@ -14,7 +14,7 @@
 | 生产构建 | `npm run build` | 编译生成 Windows 便携版单文件可执行程序 |
 | 启动成品 | `npm run start` | 直接启动根目录已构建的可执行程序 |
 
-构建产物输出到仓库一级目录 `CodexTimeZoneLauncher.exe`。
+构建产物输出到仓库一级目录 `CodexTZBox.exe`。
 
 `npm run dev:frontend` / `npm run build:frontend` 仅启动或构建前端，由 Tauri 自动调用。单独预览前端没有原生后端。
 

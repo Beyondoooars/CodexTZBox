@@ -28,7 +28,7 @@ async function main() {
   if (process.platform !== 'win32') {
     throw new Error(`当前程序仅面向 Windows 系统构建与运行；当前系统为 ${process.platform}。`);
   }
-  const artifact = join(repository, 'CodexTimeZoneLauncher.exe');
+  const artifact = join(repository, 'CodexTZBox.exe');
   if (action === 'start') {
     await lstat(artifact).catch(() => { throw new Error('请先执行 npm run build。'); });
     const child = spawn(artifact, [], { cwd: repository, detached: true, stdio: 'ignore' });
@@ -61,7 +61,7 @@ async function main() {
   await run(process.execPath, tauriArgs, env);
   if (action === 'build') {
     const release = join(env.CARGO_TARGET_DIR, 'release');
-    const sourceExe = join(release, 'codextimezonerev.exe');
+    const sourceExe = join(release, 'codextzbox.exe');
 
     const copyWithLockRetry = async (target) => {
       try {
@@ -69,7 +69,7 @@ async function main() {
       } catch (copyErr) {
         if (copyErr.code === 'EBUSY' || copyErr.code === 'EPERM') {
           console.log(`目标文件正在运行，正在关闭以更新：${target}…`);
-          await run('taskkill.exe', ['/F', '/IM', 'CodexTimeZoneLauncher.exe']).catch(() => {});
+          await run('taskkill.exe', ['/F', '/IM', 'CodexTZBox.exe']).catch(() => {});
           await new Promise(r => setTimeout(r, 500));
           await copyFile(sourceExe, target);
         } else {
@@ -82,13 +82,15 @@ async function main() {
     console.log(`已生成：${artifact}`);
 
     const toolkitDir = process.env.CODEX_TOOLKIT_DIR || 'D:\\Toolkits\\CodexTZBox';
-    try {
-      await mkdir(toolkitDir, { recursive: true });
-      const toolkitArtifact = join(toolkitDir, 'CodexTimeZoneLauncher.exe');
-      await copyWithLockRetry(toolkitArtifact);
-      console.log(`已同步至工具箱：${toolkitArtifact}`);
-    } catch (err) {
-      console.error(`同步至工具箱失败：${err.message}`);
+    if (toolkitDir) {
+      try {
+        await mkdir(toolkitDir, { recursive: true });
+        const toolkitArtifact = join(toolkitDir, 'CodexTZBox.exe');
+        await copyWithLockRetry(toolkitArtifact);
+        console.log(`已同步至工具箱：${toolkitArtifact}`);
+      } catch (err) {
+        console.error(`同步至工具箱失败：${err.message}`);
+      }
     }
   }
 }

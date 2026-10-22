@@ -1,6 +1,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import { open } from '@tauri-apps/plugin-dialog'
+import { listen } from '@tauri-apps/api/event'
+import { ask, open } from '@tauri-apps/plugin-dialog'
 import type { Bootstrap, LauncherCommand, Settings, UiMessage, Zone } from '../types'
 import { isValidTimeZone } from './useClocks'
 
@@ -21,7 +22,6 @@ function cloneSettings(settings: Settings): Settings {
 
 export function useLauncher() {
   const previewMode = import.meta.env.DEV && new URLSearchParams(window.location.search).get('ui-preview') === '1'
-  const platform = ref('windows')
   const settings = ref<Settings>(cloneSettings(defaultSettings))
   const zones = ref<Zone[]>([])
   const detected = ref('')
@@ -82,7 +82,6 @@ export function useLauncher() {
     }
     try {
       const data = await call<Bootstrap>('bootstrap')
-      platform.value = data.platform || 'windows'
       settings.value = cloneSettings(data.settings)
       zones.value = data.zones
       localZone.value = Intl.DateTimeFormat().resolvedOptions().timeZone || data.localZone || 'UTC'
@@ -117,6 +116,33 @@ export function useLauncher() {
     }
   }
 
+  // 客户端运行中：弹出确认，确认后请求其正常退出并重新启动。
+  // submitted 为空表示使用磁盘上的已保存配置（托盘菜单路径）。
+  async function relaunchWithExit(submitted?: Settings) {
+    const confirmed = await ask('检测到 Codex 正在运行。是否请求它正常退出并重新启动？请先在 Codex 中保存未保存的工作。', {
+      title: 'Codex 正在运行',
+      kind: 'warning',
+      okLabel: '退出并重启',
+      cancelLabel: '取消',
+    })
+    if (!confirmed) {
+      setMessage('info', '已取消自动重启；可先手动退出 Codex 再点击「保存并启动」。')
+      return false
+    }
+    setMessage('pending', '正在请求 Codex 退出并重新启动…')
+    try {
+      const payload: Record<string, unknown> = { exitRunning: true }
+      if (submitted) payload.settings = submitted
+      const data = await call<Record<string, unknown>>('launch', payload)
+      if (submitted) savedSettings.value = snapshot(submitted)
+      setMessage('success', typeof data.message === 'string' ? data.message : 'Codex 已启动。')
+      return true
+    } catch (error) {
+      setMessage('error', '启动失败。', String(error))
+      return false
+    }
+  }
+
   async function action(command: LauncherCommand) {
     if (previewMode) {
       setMessage('info', '开发预览不执行保存、启动或系统操作。')
@@ -135,12 +161,10 @@ export function useLauncher() {
     const pending: Record<LauncherCommand, string> = {
       save: '正在保存设置…',
       launch: '正在保存设置并启动 Codex…',
-      create_shortcut: '正在创建桌面快捷方式…',
     }
     const fallback: Record<LauncherCommand, string> = {
       save: '设置已保存。',
       launch: 'Codex 已启动。',
-      create_shortcut: '桌面快捷方式已创建。',
     }
     const submitted = cloneSettings(settings.value)
     busy.value = true
@@ -148,6 +172,9 @@ export function useLauncher() {
     setMessage('pending', pending[command])
     try {
       const data = await call<Record<string, unknown>>(command, { settings: submitted })
+      if (command === 'launch' && data.launched === false && data.needsExitConfirm === true) {
+        return await relaunchWithExit(submitted)
+      }
       if (command === 'save' || command === 'launch') savedSettings.value = snapshot(submitted)
       setMessage('success', typeof data.message === 'string' ? data.message : fallback[command])
       return true
@@ -160,10 +187,26 @@ export function useLauncher() {
     }
   }
 
-  onMounted(() => void initialize())
+  onMounted(() => {
+    void initialize()
+    if (!previewMode) {
+      void listen<string>('tray-launch-error', (event) => {
+        setMessage('error', '从托盘启动 Codex 失败。', event.payload)
+      })
+      void listen<string>('tray-launch-running', (event) => {
+        if (busy.value || initializing.value || bootstrapFailed.value) return
+        setMessage('info', typeof event.payload === 'string' && event.payload ? event.payload : '检测到 Codex 正在运行。')
+        busy.value = true
+        busyCommand.value = 'launch'
+        void relaunchWithExit().finally(() => {
+          busy.value = false
+          busyCommand.value = null
+        })
+      })
+    }
+  })
 
   return {
-    platform,
     settings,
     zones,
     detected,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { MacButton, MacLabel } from '@macvue/core'
+import { MacButton } from '@macvue/core'
 import type { IpInfo } from '../types'
 import AppIcon from './ui/AppIcon.vue'
 
@@ -25,10 +25,10 @@ const location = computed(() => props.info
   <article class="network-region" :aria-labelledby="`${regionKey}-network-title`">
     <div class="network-region-heading">
       <div>
-        <MacLabel :id="`${regionKey}-network-title`" as="h3" variant="headline">{{ title }}</MacLabel>
+        <h3 :id="`${regionKey}-network-title`">{{ title }}</h3>
         <p>{{ description }}</p>
       </div>
-      <span v-if="loading" class="network-state">{{ cached && info ? '上次结果 · 更新中' : '正在查询…' }}</span>
+      <span v-if="loading" class="network-state">{{ cached && info ? '更新中…' : '正在查询…' }}</span>
     </div>
 
     <template v-if="info">
@@ -48,12 +48,13 @@ const location = computed(() => props.info
       </div>
       <p v-if="copyState === 'error'" class="copy-error">复制失败：{{ copyError }}</p>
       <dl class="network-details">
-        <div><dt>所在地</dt><dd>{{ location }}</dd></div>
-        <div><dt>网络组织</dt><dd>{{ info.organization || '未知' }}</dd></div>
-        <div><dt>时区</dt><dd class="timezone-value">{{ info.timezone }}</dd></div>
+        <div><dt>所在地</dt><dd class="truncate-line" :title="location">{{ location }}</dd></div>
+        <div><dt>时区</dt><dd class="timezone-value truncate-line" :title="info.timezone">{{ info.timezone }}</dd></div>
       </dl>
-      <MacButton size="small" :disabled="disabled" @click="emit('use', info)">使用此时区</MacButton>
-      <p class="data-source">数据来源：{{ info.source }} / IP125</p>
+      <div class="network-action-row">
+        <MacButton size="small" :disabled="disabled" @click="emit('use', info)">使用此时区</MacButton>
+        <span class="data-source">来源：{{ info.source }}</span>
+      </div>
     </template>
     <div v-else class="network-empty">
       <span>{{ loading ? '正在查询公网出口与时区…' : '暂未获取到有效信息' }}</span>

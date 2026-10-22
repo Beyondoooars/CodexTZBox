@@ -12,49 +12,16 @@
   justify-content: space-between;
 }
 
-.toolbar-appearance .app-select,
-.toolbar-appearance .macvue-pop-up-button-anchor,
-.toolbar-appearance .macvue-pop-up-button {
-  width: 100%;
-}
-
-#appearance-menu-root .macvue-pop-up-button-menu {
-  width: min(176px, calc(100vw - 24px));
-  min-width: min(160px, calc(100vw - 24px));
-}
-
-#timezone-menu-root .macvue-pop-up-button-menu {
-  width: min(max(var(--app-select-trigger-width, 360px), 360px), 560px, calc(100vw - 24px));
-  max-width: calc(100vw - 24px);
-}
-
 #offset-menu-root .macvue-pop-up-button-menu {
   width: min(208px, calc(100vw - 24px));
   min-width: min(180px, calc(100vw - 24px));
 }
 
-#appearance-menu-root .macvue-pop-up-button-viewport,
-#timezone-menu-root .macvue-pop-up-button-viewport,
 #offset-menu-root .macvue-pop-up-button-viewport {
   max-height: min(360px, 50vh);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-}
-
-#timezone-menu-root .macvue-pop-up-button-item {
-  width: 100%;
-  height: auto;
-  min-height: 44px;
-  padding-block: 6px;
-}
-
-#timezone-menu-root .macvue-pop-up-button-item-text {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  align-items: flex-start;
-  white-space: normal;
 }
 
 .app-select-item-label,
@@ -81,4 +48,158 @@
 .app-toolbar .macvue-pop-up-button-menu,
 .workspace-scroll .macvue-pop-up-button-menu {
   color: var(--app-text);
+}
+
+/* MacVue 控件向新设计语言靠拢：细边框、方角、无阴影 */
+.workspace-scroll .macvue-text-field {
+  border-radius: var(--app-radius) !important;
+  background: var(--app-surface) !important;
+}
+
+.workspace-scroll .macvue-button {
+  border-radius: var(--app-radius) !important;
+}
+
+.workspace-scroll .macvue-segmented {
+  height: auto !important;
+  min-height: 34px;
+  padding: 3px !important;
+  border: 1px solid var(--app-separator) !important;
+  border-radius: var(--app-radius) !important;
+  background: var(--app-surface-muted) !important;
+  font-size: 12.5px !important;
+}
+
+/* 选中态的滑块：纸面白底 + 极轻阴影 */
+.workspace-scroll .macvue-segmented-pill {
+  background: var(--app-surface) !important;
+  border-radius: 3px !important;
+  box-shadow: 0 1px 2px rgba(28, 33, 40, 0.1);
+}
+
+.workspace-scroll .macvue-segment {
+  color: var(--app-text-secondary);
+  font-size: 12.5px;
+  transition: color 120ms ease;
+}
+
+.workspace-scroll .macvue-segment[data-state='on'],
+.workspace-scroll .macvue-segment[data-state='checked'] {
+  color: var(--app-text) !important;
+  font-weight: 600;
+}
+
+.workspace-scroll .macvue-segment:not([data-state='on']):not([data-state='checked']) {
+  color: var(--app-text-secondary) !important;
+}
+
+/* 文本输入框：与搜索框同一套视觉 */
+.workspace-scroll .macvue-text-field {
+  border: 1px solid var(--app-separator) !important;
+  color: var(--app-text) !important;
+  font-size: 13px !important;
+  padding: 9px 12px !important;
+}
+
+/* ------------------------------------------------------------------
+   时区搜索组合框
+   ------------------------------------------------------------------ */
+.zone-select {
+  min-width: 0;
+}
+
+.zone-select-field {
+  position: relative;
+}
+
+.zone-select-input {
+  width: 100%;
+  padding: 9px 32px 9px 12px;
+  border: 1px solid var(--app-separator);
+  border-radius: var(--app-radius);
+  background: var(--app-surface);
+  color: var(--app-text);
+  font-family: var(--app-font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  transition: border-color 120ms ease;
+}
+
+.zone-select-input:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--app-accent) 35%, var(--app-separator));
+}
+
+.zone-select-input::placeholder {
+  color: var(--app-text-secondary);
+}
+
+.zone-select-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.zone-select-icon {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  color: var(--app-text-secondary);
+  pointer-events: none;
+}
+
+.zone-select-panel {
+  position: fixed;
+  z-index: 60;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border: 1px solid var(--app-separator);
+  border-radius: var(--app-radius);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-lg);
+}
+
+.zone-select-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.zone-select-option {
+  display: flex;
+  min-height: 42px;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.zone-select-option--active {
+  background: var(--app-surface-muted);
+}
+
+.zone-select-option--current .zone-select-option-label {
+  color: var(--app-accent);
+  font-weight: 600;
+}
+
+.zone-select-option-label {
+  color: var(--app-text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.zone-select-option-detail {
+  color: var(--app-text-secondary);
+  font-family: var(--app-font-mono);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.zone-select-empty {
+  padding: 16px 12px;
+  color: var(--app-text-secondary);
+  font-size: 11.5px;
+  line-height: 1.6;
 }

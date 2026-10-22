@@ -29,6 +29,8 @@ Thumbs.db
 .DS_Store
 
 # 桌面构建产物由 GitHub Actions / Releases 分发，不提交到源码树
+/CodexTZBox.exe
+# 旧名产物（更名过渡期保留忽略，可删除）
 /CodexTimeZoneLauncher.exe
 
 # 不上传其他临时归档或安装包
