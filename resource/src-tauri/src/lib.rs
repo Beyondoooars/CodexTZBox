@@ -26,7 +26,9 @@ async fn backend(app: AppHandle, command: String, payload: Option<Value>) -> Res
     .await
     .map_err(|e| e.to_string())??;
 
-    if cmd == "launch" {
+    // 只有真正启动了客户端才隐藏窗口。needsExitConfirm（客户端正在运行）时前端还要
+    // 弹确认框，先隐藏会让用户以为程序退出了，取消后也没有窗口可回。
+    if cmd == "launch" && result["launched"].as_bool().unwrap_or(false) {
         if let Some(window) = app_handle.get_webview_window("main") {
             let _ = window.hide();
         }

@@ -44,14 +44,23 @@ pub fn tz(s: &Settings) -> Result<String, String> {
         _ => Err("请选择有效时区或 -12 至 +14 小时的 UTC 偏移。".into()),
     }
 }
+// tz() 校验前会 trim，但持久化的仍是原始字段；若磁盘上留着 " Asia/Tokyo "，
+// 前端各处以未 trim 的值查表/比对就会出现“时钟正确、标签对不上”。
+// 在读写两侧统一归一化，避免每个消费方各自 trim。
+fn normalized(s: &Settings) -> Settings {
+    let mut s = s.clone();
+    s.zone_id = s.zone_id.trim().to_string();
+    s
+}
 pub fn load(dir: &Path) -> Result<Settings, String> {
     let path = dir.join("settings.json");
     if !path.exists() { return Ok(Settings::default()); }
     let bytes = fs::read(path).map_err(|e| e.to_string())?;
     let s: Settings = serde_json::from_slice(bytes.strip_prefix(&[0xef,0xbb,0xbf]).unwrap_or(&bytes)).map_err(|e| format!("设置文件无效：{e}"))?;
-    tz(&s)?; Ok(s)
+    tz(&s)?; Ok(normalized(&s))
 }
 pub fn save(dir: &Path, s: &Settings) -> Result<(), String> {
+    let s = &normalized(s);
     tz(s)?;
     fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let serialized = serde_json::to_vec_pretty(s).map_err(|e| e.to_string())?;
@@ -79,7 +88,7 @@ pub fn save(dir: &Path, s: &Settings) -> Result<(), String> {
 }
 pub fn settings(payload: &Value, dir: &Path) -> Result<Settings, String> {
     match payload.get("settings").filter(|s| !s.is_null()) {
-        Some(s) => { let s = serde_json::from_value(s.clone()).map_err(|e| e.to_string())?; tz(&s)?; Ok(s) },
+        Some(s) => { let s = serde_json::from_value(s.clone()).map_err(|e| e.to_string())?; tz(&s)?; Ok(normalized(&s)) },
         None => load(dir),
     }
 }
@@ -111,5 +120,19 @@ mod tests {
 
         let invalid = Settings { mode: "zone".into(), zone_id: "invalid zone name".into(), offset: 8, executable: "".into() };
         assert!(tz(&invalid).is_err());
+    }
+
+    // tz() 会 trim 后校验，若把未 trim 的原值写回磁盘，前端按字符串查表就会对不上。
+    #[test]
+    fn zone_id_is_trimmed_on_save_and_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let padded = Settings { mode: "zone".into(), zone_id: "  Asia/Tokyo  ".into(), offset: 8, executable: "".into() };
+        save(dir.path(), &padded).unwrap();
+        assert_eq!(load(dir.path()).unwrap().zone_id, "Asia/Tokyo");
+        let raw = fs::read_to_string(dir.path().join("settings.json")).unwrap();
+        assert!(raw.contains("\"Asia/Tokyo\"") && !raw.contains(" Asia/Tokyo"));
+        // 手改过、带空格的旧文件在读取时同样归一化。
+        fs::write(dir.path().join("settings.json"), r#"{"zoneId":" Asia/Seoul ","mode":"zone"}"#).unwrap();
+        assert_eq!(load(dir.path()).unwrap().zone_id, "Asia/Seoul");
     }
 }

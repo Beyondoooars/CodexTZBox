@@ -191,24 +191,50 @@ export function useLauncher() {
     } finally {
       busy.value = false
       busyCommand.value = null
+      flushPendingTrayLaunch()
     }
   }
 
+  // 初始化期间收到的托盘启动事件不能直接丢弃：lib.rs 收到 needsExitConfirm 后已经把
+  // 窗口带到前台并发事件，静默 return 会让用户看到一个没有任何提示的窗口。
+  // 先暂存 payload，bootstrap 结束后再补上确认流程。
+  let pendingTrayLaunch: string | null = null
+
+  function flushPendingTrayLaunch() {
+    const pending = pendingTrayLaunch
+    pendingTrayLaunch = null
+    if (pending !== null) handleTrayLaunch(pending)
+  }
+
+  function handleTrayLaunch(payload: string) {
+    // 初始化或已有请求在跑时先暂存，等当前流程结束后再补上确认——
+    // 直接丢弃会让用户看到一个没有任何提示的窗口。
+    if (initializing.value || busy.value) {
+      pendingTrayLaunch = payload
+      return
+    }
+    if (bootstrapFailed.value) {
+      setMessage('error', '从托盘启动 Codex 未完成：设置尚未读取成功，请重新读取设置。')
+      return
+    }
+    setMessage('info', payload)
+    busy.value = true
+    busyCommand.value = 'launch'
+    void relaunchWithExit().finally(() => {
+      busy.value = false
+      busyCommand.value = null
+      flushPendingTrayLaunch()
+    })
+  }
+
   onMounted(() => {
-    void initialize()
+    void initialize().then(flushPendingTrayLaunch)
     if (!previewMode) {
       void listen<string>('tray-launch-error', (event) => {
         setMessage('error', '从托盘启动 Codex 失败。', event.payload)
       })
       void listen<string>('tray-launch-running', (event) => {
-        if (busy.value || initializing.value || bootstrapFailed.value) return
-        setMessage('info', typeof event.payload === 'string' && event.payload ? event.payload : '检测到 Codex 正在运行。')
-        busy.value = true
-        busyCommand.value = 'launch'
-        void relaunchWithExit().finally(() => {
-          busy.value = false
-          busyCommand.value = null
-        })
+        handleTrayLaunch(typeof event.payload === 'string' && event.payload ? event.payload : '检测到 Codex 正在运行。')
       })
     }
   })

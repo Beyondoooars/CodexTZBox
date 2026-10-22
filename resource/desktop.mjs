@@ -86,14 +86,12 @@ async function main() {
 
     const toolkitDir = process.env.CODEX_TOOLKIT_DIR || 'D:\\Toolkits\\CodexTZBox';
     if (toolkitDir) {
-      try {
-        await mkdir(toolkitDir, { recursive: true });
-        const toolkitArtifact = join(toolkitDir, 'CodexTZBox.exe');
-        await copyWithLockRetry(toolkitArtifact);
-        console.log(`已同步至工具箱：${toolkitArtifact}`);
-      } catch (err) {
-        console.error(`同步至工具箱失败：${err.message}`);
-      }
+      // 工具箱里的成品是用户实际运行的那份，同步失败必须让构建失败：
+      // 只打印一行警告会让 build 报成功、工具箱却留着旧版本。
+      const toolkitArtifact = join(toolkitDir, 'CodexTZBox.exe');
+      await mkdir(toolkitDir, { recursive: true });
+      await copyWithLockRetry(toolkitArtifact);
+      console.log(`已同步至工具箱：${toolkitArtifact}`);
     }
   }
 }
