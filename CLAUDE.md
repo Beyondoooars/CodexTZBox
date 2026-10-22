@@ -12,7 +12,7 @@ CodexTZBox 是 Windows 10/11 专享的桌面启动器：让 OpenAI Codex 桌面�
 
 - `npm install` — 安装依赖；要集中缓存可加 `--cache ../environment/npm-cache`
 - `npm run dev` — 开发模式（`desktop.mjs` → PowerShell 装配 VS 环境 → `tauri dev`，额外监听 backend 源文件变更）
-- `npm run build` — 编译 Release 单文件产物，输出到仓库根目录 `CodexTZBox.exe`，并按 `CODEX_TOOLKIT_DIR`（默认 `${CODEX_TOOLKIT_DIR:-<工具箱目录>}`）向工具箱目录同步一份拷贝；目标被占用时自动结束后重试
+- `npm run build` — 编译 Release 单文件产物，输出到仓库根目录 `CodexTZBox.exe`，并按 `CODEX_TOOLKIT_DIR`（默认 `D:\Toolkits\CodexTZBox`）向工具箱目录同步一份拷贝；目标文件被运行中的成品占用时会重试 5 次后报错，不会强制结束进程
 - `npm run start` — 启动已构建的成品
 - `npm run build:frontend` — 前端类型检查 + 构建（`vue-tsc --noEmit && vite build`）；`npm run dev:frontend` 只起 Vite
 
@@ -39,14 +39,15 @@ CodexTZBox 是 Windows 10/11 专享的桌面启动器：让 OpenAI Codex 桌面�
 
 ## 约定与注意
 
-- `.gitignore` 有意忽略：`environment/`、`data/`、`docs/`、`.github/`、根目录 exe。`docs/` 是本地文档区（交接记录、工作日志，不上传）；`.github/` 工作流仅本地保留；桌面产物由 CI/Release 分发，不进源码树。
+- `.gitignore` 有意忽略：`environment/`、`data/`、`docs/`、`.github/`、根目录 exe。`.github/` 工作流仅本地保留（因此远端仓库不会自动构建/发布）；桌面产物由 CI/Release 分发，不进源码树。
 - 界面文案与 README 均为中文；更新功能时同步维护根目录 `README.md` 与 `resource/README.md`（源码目录约定说明）。
 - 视觉语言（2026-10-22 重构）：纸面底色 + 墨色文字，双时钟对比是唯一主角（`TimePreview.vue`），其余为细线分隔的安静表单；设计令牌在 `styles/tokens.css`（含深色模式），MacVue 组件覆盖在 `styles/macvue-adapter.css`。不再使用卡片阴影堆叠与状态徽章。
 - 改动代码前先与用户对齐计划（迁移交接时用户明确指示「先不着急改代码」）；完成后建议跑 `npm run build:frontend` + `cargo check` 验证。
 - Git：`main` 分支；远端 `github.com/Beyondoooars/CodexTZBox`（2026-10-22 起，旧仓库 `codexTimeZoneRev` 已删除）。
 
-## 当前状态（2026-10-12）
+## 当前状态（2026-10-22）
 
-- v0.1.3，最后提交 `93c2253`「support OpenAI Codex 26.924+ update」。工作区存在未提交改动：托盘常驻、单实例防多开、纯白极简双时钟条、健壮性加固等。
-- 项目于 2026-10-12 从 `<旧工作目录>` 整体迁移至 `<工作目录>`（Git 历史与离线缓存完整保留），前端构建与 `cargo check` 已验证通过；交接记录在 `docs/handoffs/work/` 下。
-- 2026-10-13：品牌与产物名已整体切换为 `CodexTZBox.exe` /「Codex 时区沙盒」——含 crate/包名 `codextzbox`、互斥锁/唤醒事件名 `CodexTZBox_*`、data 回退目录与 CI 产物名、工具箱默认目录 `${CODEX_TOOLKIT_DIR:-<工具箱目录>}`。
+- v0.1.3；UI 已按纸面+墨色重构，仓库发布到 `Beyondoooars/CodexTZBox`（旧仓库与旧目录已删除）。
+- 启动流程加固：stderr 由后台线程增量读取并写入 64 KiB 封顶缓冲区，早退时无需等 EOF 即可回传诊断；客户端 800ms 内以任意退出码退出都会报启动失败。
+- 已知取舍：`Etc/GMT±N` 只能表达整小时偏移，固定偏移模式不支持 +5:30 这类半小时时区（界面已提示改用地区时区）。
+- `environment/`（约 7.5 GB）与 `resource/node_modules` 保留在本机用于离线构建，不进版本库。

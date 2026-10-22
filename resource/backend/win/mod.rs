@@ -319,33 +319,44 @@ pub fn launch(dir: &Path, s: Settings, exit_running: bool) -> Result<Value, Stri
     save(dir, &s)?;
     let mut child = cmd.spawn().map_err(|e| format!("无法启动客户端：{e}"))?;
 
-    // 在独立线程里读 stderr：
+    // 在独立线程里增量读 stderr，写入共享缓冲区：
     // 1) 客户端常驻时持续读走，避免管道写满把它阻塞；
-    // 2) 早退时只等待有限时间——Electron 派生的子进程可能继承写端，
-    //    read_to_end 会一直等不到 EOF，不能让它拖住整个后端线程。
-    let (stderr_tx, stderr_rx) = std::sync::mpsc::channel();
+    // 2) 早退时不必等到 EOF 就能拿到已产生的诊断信息——Electron 派生的子进程
+    //    可能继承写端使 EOF 永不到来，不能把诊断读取押在 read_to_end 上；
+    // 3) 缓冲区封顶 64 KiB，避免长时间运行时无限增长。
+    const STDERR_LIMIT: usize = 64 * 1024;
+    let stderr_buffer = std::sync::Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
     if let Some(mut pipe) = child.stderr.take() {
+        let buffer = stderr_buffer.clone();
         std::thread::spawn(move || {
             use std::io::Read;
-            let mut buf = Vec::new();
-            let _ = pipe.read_to_end(&mut buf);
-            let _ = stderr_tx.send(buf);
+            let mut chunk = [0u8; 8192];
+            loop {
+                match pipe.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(read) => {
+                        if let Ok(mut buf) = buffer.lock() {
+                            let remaining = STDERR_LIMIT.saturating_sub(buf.len());
+                            buf.extend_from_slice(&chunk[..read.min(remaining)]);
+                        }
+                    }
+                }
+            }
         });
     }
-    let stderr_detail = || -> String {
-        match stderr_rx.recv_timeout(Duration::from_millis(500)) {
-            Ok(buf) => {
-                let text = String::from_utf8_lossy(&buf).trim().to_string();
-                if text.is_empty() { String::new() } else { format!("：{text}") }
-            }
-            Err(_) => String::new(),
-        }
+    let stderr_snapshot = || -> String {
+        let text = stderr_buffer
+            .lock()
+            .map(|buf| String::from_utf8_lossy(&buf).trim().to_string())
+            .unwrap_or_default();
+        if text.is_empty() { String::new() } else { format!("：{text}") }
     };
 
     std::thread::sleep(Duration::from_millis(800));
     if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
-        // 早退：非 0 退出或“成功”退出都意味着客户端没有留在前台运行，不能报已启动。
-        let detail = stderr_detail();
+        // 早退：已退出进程的输出通常已经到达，再给读取线程一小段时间收尾。
+        std::thread::sleep(Duration::from_millis(300));
+        let detail = stderr_snapshot();
         if !status.success() {
             return Err(format!("客户端启动后异常退出 ({status}){detail}"));
         }

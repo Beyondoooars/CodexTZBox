@@ -55,9 +55,13 @@ export function useLauncher() {
     message.value = { kind, summary, detail }
   }
 
+  // initializing 初始为 true（首屏即显示“正在读取”），不能拿它当作“正在请求”的守卫；
+  // 单独用 in-flight 标记防止并发重复请求，首次加载与失败重试都照常执行。
+  let bootstrapInFlight = false
+
   async function initialize() {
-    // 读取期间重复触发时直接忽略；读取失败后的重试、以及首次加载都必须真正执行。
-    if (initializing.value) return
+    if (bootstrapInFlight) return
+    bootstrapInFlight = true
     initializing.value = true
     bootstrapFailed.value = false
     setMessage('pending', '正在读取设置并查找 Codex…')
@@ -78,6 +82,7 @@ export function useLauncher() {
       savedSettings.value = snapshot(previewSettings)
       bootstrapFailed.value = false
       initializing.value = false
+      bootstrapInFlight = false
       setMessage('info', '开发预览使用固定演示数据；原生操作已禁用。')
       return
     }
@@ -94,6 +99,7 @@ export function useLauncher() {
       const detail = String(error)
       setMessage('error', '读取设置失败，请重试。', detail)
     } finally {
+      bootstrapInFlight = false
       initializing.value = false
     }
   }
