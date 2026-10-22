@@ -63,10 +63,13 @@ export function isValidIanaZone(zone: string) {
 const zoneValidity = new Map<string, boolean>()
 
 export function isValidTimeZone(zone: string) {
-  const cached = zoneValidity.get(zone)
+  // 后端 tz() 会先 trim 再校验；这里同样先 trim，否则 " Asia/Tokyo " 会被 Intl 拒绝，
+  // 造成前端报错、后端其实能接受的错位。
+  const value = zone.trim()
+  const cached = zoneValidity.get(value)
   if (cached !== undefined) return cached
-  const valid = isValidIanaZone(zone) && isIntlTimeZone(zone)
-  if (zoneValidity.size < 256) zoneValidity.set(zone, valid)
+  const valid = isValidIanaZone(value) && isIntlTimeZone(value)
+  if (zoneValidity.size < 256) zoneValidity.set(value, valid)
   return valid
 }
 
@@ -76,7 +79,9 @@ export function useClocks(settings: Ref<Settings>, localZone: Ref<string>) {
   let clockTimer = 0
 
   function clock(zone: string, fixed?: number): ClockValue {
-    const safeZone = isValidTimeZone(zone) ? zone : 'UTC'
+    // 与后端一致：trim 后再判断，并直接用 trim 后的值渲染。
+    const trimmed = zone.trim()
+    const safeZone = isValidTimeZone(trimmed) ? trimmed : 'UTC'
     const date = fixed === undefined ? now.value : new Date(now.value.getTime() + fixed * 3_600_000)
     const value = parts(date, fixed === undefined ? safeZone : 'UTC')
     const minutes = fixed === undefined ? offsetFor(now.value, safeZone) : fixed * 60

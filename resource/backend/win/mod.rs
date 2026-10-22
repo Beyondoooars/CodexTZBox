@@ -360,6 +360,11 @@ pub fn launch(dir: &Path, s: Settings, exit_running: bool) -> Result<Value, Stri
         if !status.success() {
             return Err(format!("客户端启动后异常退出 ({status}){detail}"));
         }
+        // 正常退出码也可能是「把启动请求转交给已有实例后自行退出」：
+        // 运行检测只能按路径/目录匹配，可能漏掉别的安装位置，所以这里再确认一次。
+        if is_running(&path).unwrap_or(false) {
+            return Ok(json!({"launched":true,"message":"Codex 已在前台运行，已按所选设置接管。"}));
+        }
         return Err(format!("客户端启动后立即退出 ({status}){detail}"));
     }
     Ok(json!({"launched":true,"message":"Codex 已按所选时区启动。"}))
