@@ -64,16 +64,16 @@ async function main() {
     const sourceExe = join(release, 'codextzbox.exe');
 
     const copyWithLockRetry = async (target) => {
-      // 目标被占用时反复重试，但绝不强制结束进程：Windows 会锁住运行中 exe 的镜像，
+      // 目标被占用时最多尝试 5 次，但绝不强制结束进程：Windows 会锁住运行中 exe 的镜像，
       // 强制 kill 既可能丢配置，也与产品承诺的“绝不强杀”一致。用户需自行退出成品。
-      for (let attempt = 1; ; attempt += 1) {
+      for (let attempt = 1; attempt <= 5; attempt += 1) {
         try {
           await copyFile(sourceExe, target);
           return;
         } catch (copyErr) {
           if (copyErr.code !== 'EBUSY' && copyErr.code !== 'EPERM') throw copyErr;
-          if (attempt >= 5) {
-            throw new Error(`目标文件被占用，请先退出正在运行的 CodexTZBox.exe 后重试：${target}`);
+          if (attempt === 5) {
+            throw new Error(`目标文件被占用（已尝试 5 次），请先退出正在运行的 CodexTZBox.exe 后重试：${target}`);
           }
           console.log(`目标文件正在使用，稍后重试（${attempt}/5）：${target}…`);
           await new Promise(r => setTimeout(r, 1500));

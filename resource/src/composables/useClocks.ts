@@ -60,6 +60,8 @@ export function isValidIanaZone(zone: string) {
 }
 
 // 校验结果只随时区字符串变化，而 clock() 每秒都会重算，缓存避免每秒重复构造 Intl。
+// 超过上限就整体清空而不是停止写入，否则热路径会悄悄退回每秒构造 Intl。
+const ZONE_CACHE_LIMIT = 256
 const zoneValidity = new Map<string, boolean>()
 
 export function isValidTimeZone(zone: string) {
@@ -69,7 +71,8 @@ export function isValidTimeZone(zone: string) {
   const cached = zoneValidity.get(value)
   if (cached !== undefined) return cached
   const valid = isValidIanaZone(value) && isIntlTimeZone(value)
-  if (zoneValidity.size < 256) zoneValidity.set(value, valid)
+  if (zoneValidity.size >= ZONE_CACHE_LIMIT) zoneValidity.clear()
+  zoneValidity.set(value, valid)
   return valid
 }
 

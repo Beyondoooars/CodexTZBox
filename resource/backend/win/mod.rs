@@ -323,7 +323,7 @@ pub fn launch(dir: &Path, s: Settings, exit_running: bool) -> Result<Value, Stri
     // 1) 客户端常驻时持续读走，避免管道写满把它阻塞；
     // 2) 早退时不必等到 EOF 就能拿到已产生的诊断信息——Electron 派生的子进程
     //    可能继承写端使 EOF 永不到来，不能把诊断读取押在 read_to_end 上；
-    // 3) 缓冲区封顶 64 KiB，避免长时间运行时无限增长。
+    // 3) 缓冲区封顶 64 KiB，满了之后只排空管道、不再加锁写入。
     const STDERR_LIMIT: usize = 64 * 1024;
     let stderr_buffer = std::sync::Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
     if let Some(mut pipe) = child.stderr.take() {
@@ -331,41 +331,44 @@ pub fn launch(dir: &Path, s: Settings, exit_running: bool) -> Result<Value, Stri
         std::thread::spawn(move || {
             use std::io::Read;
             let mut chunk = [0u8; 8192];
+            let mut full = false;
             loop {
                 match pipe.read(&mut chunk) {
+                    // Interrupted 只是被信号打断，继续读即可。
+                    Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
                     Ok(0) | Err(_) => break,
                     Ok(read) => {
+                        if full { continue; }
                         if let Ok(mut buf) = buffer.lock() {
                             let remaining = STDERR_LIMIT.saturating_sub(buf.len());
                             buf.extend_from_slice(&chunk[..read.min(remaining)]);
+                            full = buf.len() >= STDERR_LIMIT;
                         }
                     }
                 }
             }
         });
     }
-    let stderr_snapshot = || -> String {
-        let text = stderr_buffer
-            .lock()
-            .map(|buf| String::from_utf8_lossy(&buf).trim().to_string())
-            .unwrap_or_default();
-        if text.is_empty() { String::new() } else { format!("：{text}") }
-    };
 
     std::thread::sleep(Duration::from_millis(800));
     if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
-        // 早退：已退出进程的输出通常已经到达，再给读取线程一小段时间收尾。
-        std::thread::sleep(Duration::from_millis(300));
-        let detail = stderr_snapshot();
+        // 早退：只有异常退出才需要诊断信息；正常退出不在这里付出额外等待。
         if !status.success() {
+            std::thread::sleep(Duration::from_millis(300));
+            let text = stderr_buffer
+                .lock()
+                .map(|buf| String::from_utf8_lossy(&buf).trim().to_string())
+                .unwrap_or_default();
+            let detail = if text.is_empty() { String::new() } else { format!("：{text}") };
             return Err(format!("客户端启动后异常退出 ({status}){detail}"));
         }
-        // 正常退出码也可能是「把启动请求转交给已有实例后自行退出」：
-        // 运行检测只能按路径/目录匹配，可能漏掉别的安装位置，所以这里再确认一次。
-        if is_running(&path).unwrap_or(false) {
-            return Ok(json!({"launched":true,"message":"Codex 已在前台运行，已按所选设置接管。"}));
-        }
-        return Err(format!("客户端启动后立即退出 ({status}){detail}"));
+        // 退出码 0 但客户端没有留在前台：说明它自己接管或转交了启动请求。
+        // 注意不能用 is_running(&path) 判断——那只会匹配同一路径/目录，
+        // 既看不到别的安装位置的实例，又会被同目录残留的辅助进程误导成成功。
+        // 这里如实报告“已启动后退出”，由用户确认客户端是否真的在运行。
+        return Err(
+            "客户端启动后立即退出：它可能已转交给正在运行的实例，请确认 Codex 是否已打开。".to_string()
+        );
     }
     Ok(json!({"launched":true,"message":"Codex 已按所选时区启动。"}))
 }
