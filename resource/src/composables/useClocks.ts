@@ -59,8 +59,15 @@ export function isValidIanaZone(zone: string) {
   return parts.every((part) => part.length > 0 && /^[A-Za-z0-9_+-]+$/.test(part))
 }
 
+// 校验结果只随时区字符串变化，而 clock() 每秒都会重算，缓存避免每秒重复构造 Intl。
+const zoneValidity = new Map<string, boolean>()
+
 export function isValidTimeZone(zone: string) {
-  return isValidIanaZone(zone) && isIntlTimeZone(zone)
+  const cached = zoneValidity.get(zone)
+  if (cached !== undefined) return cached
+  const valid = isValidIanaZone(zone) && isIntlTimeZone(zone)
+  if (zoneValidity.size < 256) zoneValidity.set(zone, valid)
+  return valid
 }
 
 export function useClocks(settings: Ref<Settings>, localZone: Ref<string>) {
