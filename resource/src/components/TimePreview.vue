@@ -13,7 +13,8 @@ const props = defineProps<{
 }>()
 
 const targetName = computed(() => {
-  if (props.settings.mode === 'offset') return `UTC ${props.targetClock.offset}`
+  // targetClock.offset 已自带 “UTC ±HH:MM”，不要再拼一次前缀。
+  if (props.settings.mode === 'offset') return `固定偏移 ${props.targetClock.offset}`
   const zone = props.zones.find((item) => item.id === props.settings.zoneId)
   if (zone && zone.label !== zone.id) return `${zone.label} · ${zone.id}`
   const label = zoneLabel(props.settings.zoneId)

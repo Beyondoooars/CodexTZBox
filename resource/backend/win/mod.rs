@@ -318,21 +318,38 @@ pub fn launch(dir: &Path, s: Settings, exit_running: bool) -> Result<Value, Stri
 
     save(dir, &s)?;
     let mut child = cmd.spawn().map_err(|e| format!("无法启动客户端：{e}"))?;
+
+    // 在独立线程里读 stderr：
+    // 1) 客户端常驻时持续读走，避免管道写满把它阻塞；
+    // 2) 早退时只等待有限时间——Electron 派生的子进程可能继承写端，
+    //    read_to_end 会一直等不到 EOF，不能让它拖住整个后端线程。
+    let (stderr_tx, stderr_rx) = std::sync::mpsc::channel();
+    if let Some(mut pipe) = child.stderr.take() {
+        std::thread::spawn(move || {
+            use std::io::Read;
+            let mut buf = Vec::new();
+            let _ = pipe.read_to_end(&mut buf);
+            let _ = stderr_tx.send(buf);
+        });
+    }
+    let stderr_detail = || -> String {
+        match stderr_rx.recv_timeout(Duration::from_millis(500)) {
+            Ok(buf) => {
+                let text = String::from_utf8_lossy(&buf).trim().to_string();
+                if text.is_empty() { String::new() } else { format!("：{text}") }
+            }
+            Err(_) => String::new(),
+        }
+    };
+
     std::thread::sleep(Duration::from_millis(800));
     if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+        // 早退：非 0 退出或“成功”退出都意味着客户端没有留在前台运行，不能报已启动。
+        let detail = stderr_detail();
         if !status.success() {
-            let mut err_msg = String::new();
-            if let Some(mut err_pipe) = child.stderr.take() {
-                use std::io::Read;
-                let mut buf = Vec::new();
-                let _ = err_pipe.read_to_end(&mut buf);
-                let text = String::from_utf8_lossy(&buf).trim().to_string();
-                if !text.is_empty() {
-                    err_msg = format!("：{text}");
-                }
-            }
-            return Err(format!("客户端启动后异常退出 ({status}){err_msg}"));
+            return Err(format!("客户端启动后异常退出 ({status}){detail}"));
         }
+        return Err(format!("客户端启动后立即退出 ({status}){detail}"));
     }
     Ok(json!({"launched":true,"message":"Codex 已按所选时区启动。"}))
 }

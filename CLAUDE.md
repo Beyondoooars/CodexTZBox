@@ -43,7 +43,7 @@ CodexTZBox 是 Windows 10/11 专享的桌面启动器：让 OpenAI Codex 桌面�
 - 界面文案与 README 均为中文；更新功能时同步维护根目录 `README.md` 与 `resource/README.md`（源码目录约定说明）。
 - 视觉语言（2026-10-22 重构）：纸面底色 + 墨色文字，双时钟对比是唯一主角（`TimePreview.vue`），其余为细线分隔的安静表单；设计令牌在 `styles/tokens.css`（含深色模式），MacVue 组件覆盖在 `styles/macvue-adapter.css`。不再使用卡片阴影堆叠与状态徽章。
 - 改动代码前先与用户对齐计划（迁移交接时用户明确指示「先不着急改代码」）；完成后建议跑 `npm run build:frontend` + `cargo check` 验证。
-- Git：`main` 分支；远端沿用旧名 `github.com/Beyondoooars/CodexTZBox`。
+- Git：`main` 分支；远端 `github.com/Beyondoooars/CodexTZBox`（2026-10-22 起，旧仓库 `codexTimeZoneRev` 已删除）。
 
 ## 当前状态（2026-10-12）
 

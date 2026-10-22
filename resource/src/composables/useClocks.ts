@@ -38,13 +38,29 @@ export function offsetText(minutes: number) {
   return `UTC ${sign}${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`
 }
 
-export function isValidTimeZone(zone: string) {
+// 判断是否为浏览器 Intl 能识别的时区名（含 EST、CST 这类缩写别名）。
+function isIntlTimeZone(zone: string) {
   try {
     new Intl.DateTimeFormat('zh-CN', { timeZone: zone }).format()
     return true
   } catch {
     return false
   }
+}
+
+// 与后端 common.rs 的 is_valid_iana_zone 保持一致：UTC/GMT 或至少含一级 “区域/地点”，
+// 且每段只允许字母数字与 _ - +。这样前端不会放过后端要拒绝的缩写别名（EST、CST）。
+export function isValidIanaZone(zone: string) {
+  const value = zone.trim()
+  if (!value || value.length > 64) return false
+  if (value === 'UTC' || value === 'GMT') return true
+  const parts = value.split('/')
+  if (parts.length < 2) return false
+  return parts.every((part) => part.length > 0 && /^[A-Za-z0-9_+-]+$/.test(part))
+}
+
+export function isValidTimeZone(zone: string) {
+  return isValidIanaZone(zone) && isIntlTimeZone(zone)
 }
 
 export function useClocks(settings: Ref<Settings>, localZone: Ref<string>) {

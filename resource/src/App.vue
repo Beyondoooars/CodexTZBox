@@ -48,7 +48,6 @@ async function refreshNetwork() {
             :initializing="launcher.initializing.value"
             :bootstrap-failed="launcher.bootstrapFailed.value"
             :zone-error="launcher.zoneError.value"
-            :current-offset="clocks.targetClock.value.offset"
             :preview-mode="launcher.previewMode"
             @update:settings="updateSettings"
             @browse="launcher.browse"

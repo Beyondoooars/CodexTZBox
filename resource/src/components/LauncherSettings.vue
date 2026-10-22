@@ -15,7 +15,6 @@ const props = defineProps<{
   initializing: boolean
   bootstrapFailed: boolean
   zoneError: string
-  currentOffset: string
   previewMode: boolean
 }>()
 
@@ -91,6 +90,7 @@ function setOffset(value: string | number) {
       <SettingRow
         v-else
         label="UTC 偏移量"
+        description="仅支持整小时偏移；印度 +5:30、尼泊尔 +5:45 等请改用地区时区"
       >
         <AppSelect
           :model-value="settings.offset"

@@ -68,9 +68,9 @@ async function main() {
         await copyFile(sourceExe, target);
       } catch (copyErr) {
         if (copyErr.code === 'EBUSY' || copyErr.code === 'EPERM') {
-          console.log(`目标文件正在运行，正在关闭以更新：${target}…`);
-          await run('taskkill.exe', ['/F', '/IM', 'CodexTZBox.exe']).catch(() => {});
-          await new Promise(r => setTimeout(r, 500));
+          // 目标被占用时只重试，不强制结束进程：强制 kill 可能丢配置，也与产品承诺的“绝不强杀”一致。
+          console.log(`目标文件正在使用，稍后重试：${target}…`);
+          await new Promise(r => setTimeout(r, 1500));
           await copyFile(sourceExe, target);
         } else {
           throw copyErr;

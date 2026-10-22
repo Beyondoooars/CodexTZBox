@@ -56,7 +56,8 @@ export function useLauncher() {
   }
 
   async function initialize() {
-    if (initializing.value && !bootstrapFailed.value && savedSettings.value) return
+    // 读取期间重复触发时直接忽略；读取失败后的重试、以及首次加载都必须真正执行。
+    if (initializing.value) return
     initializing.value = true
     bootstrapFailed.value = false
     setMessage('pending', '正在读取设置并查找 Codex…')
