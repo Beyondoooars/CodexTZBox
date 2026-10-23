@@ -23,7 +23,9 @@ CodexTZBox 是 Windows 10/11 专享的桌面启动器：让 OpenAI Codex 桌面�
 
 环境变量：`CODEX_TZ_DEV_ROOT`（本机 Windows 工具链根目录）、`CODEX_TZ_PROXY`（构建下载代理）、`CODEX_TOOLKIT_DIR`（可选，构建后额外同步的目标目录；不设置则不同步）。
 
-平台约束：仅面向 Windows——`desktop.mjs` 在非 win32 平台直接报错；需要 VS 2022 C++ Build Tools、Rust stable、Node ≥ 22.12；运行需系统具备 WebView2（Win10/11 一般内置）。CI 见 `.github/workflows/build-desktop.yml`（windows-2022 构建，推 `main` 出构建产物，推 `v*` 标签自动发布 Release）；CI 未设置 `CODEX_TOOLKIT_DIR`，因此不会尝试同步工具箱。
+平台约束：仅面向 Windows——`desktop.mjs` 在非 win32 平台直接报错；需要 VS 2022 C++ Build Tools、Rust stable、Node ≥ 22.12；运行需系统具备 WebView2（Win10/11 一般内置）。
+
+**发布流程全部在云端**（`.github/workflows/build-desktop.yml`）：推 `main` 只做构建并上传临时产物，不发版；要发新版在 Actions 页手动触发 workflow，选 patch/minor/major 或具体 `X.Y.Z`，它会由 `scripts/bump-version.mjs` 同步五处版本字段（package.json、package-lock.json、tauri.conf.json、Cargo.toml、Cargo.lock）→ 构建 → 校验产物 → 回写版本号提交并打 `v*` 标签 → 发布 Release（含 SHA256SUMS.txt）。手动推 `v*` 标签也会走同一条发布链。本机因此不必保留构建缓存，改完代码提交推送即可。
 
 ## 架构
 
@@ -50,4 +52,4 @@ CodexTZBox 是 Windows 10/11 专享的桌面启动器：让 OpenAI Codex 桌面�
 - v0.1.3；UI 已按纸面+墨色重构，仓库发布到 `Beyondoooars/CodexTZBox`（旧仓库与旧目录已删除）。
 - 启动流程加固：stderr 由后台线程增量读取并写入 64 KiB 封顶缓冲区，早退时无需等 EOF 即可回传诊断；客户端 800ms 内退出时报「启动后异常退出」（非 0）或「立即退出，可能已转交给运行中的实例」（0）。
 - 已知取舍：`Etc/GMT±N` 只能表达整小时偏移，固定偏移模式不支持 +5:30 这类半小时时区（界面不再提示，需要半小时偏移请选地区时区）。
-- 云端打包已可用（GitHub Actions），本机不再需要保留完整构建缓存：`environment/cargo-target` 已删除，需要时 `npm run build` 会自动重建；`environment/cargo`（约 559 MB，离线 crate 缓存）与 `resource/node_modules` 仅在需要本地构建/开发时保留，均可随时删除后重新生成。
+- 云端打包与发布是唯一正式渠道（GitHub Actions）；本机不保留构建缓存（`environment/`、`resource/node_modules` 均已删除）。本地仅在调试时按需 `npm install` / `npm run build`，两者都会重新生成，`environment/cargo` 缺失时 cargo 回落全局缓存。

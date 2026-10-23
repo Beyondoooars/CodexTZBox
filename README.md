@@ -88,12 +88,14 @@
    npm run dev
    ```
 
-4. **编译生成 Windows 便携版单文件 Release 产物**：
+4. **编译生成 Windows 便携版单文件 Release 产物（本地调试用）**：
    ```powershell
    npm run build
    ```
    *构建完成后，优化后的单文件可执行程序将自动输出至仓库一级目录：`../CodexTZBox.exe`。*
    *如需在构建后额外复制一份到自定义目录（如 U 盘或工具箱），设置环境变量 `CODEX_TOOLKIT_DIR`；未设置时只产出上述文件，源码中不含任何本机路径。*
+
+   > **正式发布不在本地做**：推送到 `main` 只会构建并上传临时产物；要发新版，到 GitHub Actions 手动运行 `Build desktop applications`，选择 `patch` / `minor` / `major` 或具体版本号，工作流会自动递增版本、构建、打标签并发布 Release（附 SHA256 校验文件）。
 
 5. **直接启动已构建的成品**：
    ```powershell

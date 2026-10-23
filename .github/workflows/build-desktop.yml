@@ -2,6 +2,11 @@ name: Build desktop applications
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: '版本递增方式：patch / minor / major，或明确的 X.Y.Z'
+        required: false
+        default: patch
   push:
     branches:
       - main
@@ -13,17 +18,26 @@ permissions:
 
 concurrency:
   group: desktop-build-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-windows:
     name: Build Windows x64
     runs-on: windows-2022
     timeout-minutes: 45
+    permissions:
+      # 手动发布时需要把版本号提交写回 main 并打标签。
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # 写回版本号提交与打标签需要完整历史。
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -36,6 +50,28 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
+
+      # 版本号必须在构建前确定：产物内嵌的版本来自 tauri.conf.json，
+      # 而 --locked 构建要求 Cargo.lock 与 Cargo.toml 的版本一致。
+      - name: Bump version
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        env:
+          BUMP: ${{ inputs.version || 'patch' }}
+        run: node scripts/bump-version.mjs $env:BUMP
+
+      - name: Align version with tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: node scripts/bump-version.mjs $env:GITHUB_REF_NAME
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $version = node -p "require('./resource/package.json').version"
+          "VERSION=$version" >> $env:GITHUB_OUTPUT
+          "VERSION=$version" >> $env:GITHUB_ENV
 
       - name: Install frontend dependencies
         working-directory: resource
@@ -62,9 +98,30 @@ jobs:
           retention-days: 30
           compression-level: 0
 
+      # 产物校验通过后再写回版本号并打标签：构建失败时仓库里不会留下
+      # 一个没有对应产物的版本号。用 GITHUB_TOKEN 推送不会再次触发工作流，
+      # 因此标签不会引发第二轮构建。
+      - name: Commit version bump and tag
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add resource/package.json resource/package-lock.json resource/src-tauri/tauri.conf.json resource/src-tauri/Cargo.toml resource/src-tauri/Cargo.lock
+          # 显式指定了与当前相同的版本号时文件没有变化，仍需一次提交作为标签的落点。
+          git commit --allow-empty -m "chore: 发布 v$env:VERSION [skip ci]"
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            git push origin HEAD:main
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($attempt -eq 3) { throw '版本号提交推送失败' }
+            git pull --rebase origin main
+          }
+          git tag "v$env:VERSION"
+          git push origin "v$env:VERSION"
+
   publish-release:
     name: Publish GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     needs:
       - build-windows
     runs-on: ubuntu-24.04
@@ -85,11 +142,15 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build-windows.outputs.version }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
+          tag="v${VERSION}"
+          # 手动发布时标签由构建任务推送，tag 触发的构建里它已存在；
+          # --verify-tag 会在这两种情况下都确认标签真的指向一个提交。
+          gh release create "$tag" \
             "release-assets/CodexTZBox.exe" \
             "release-assets/SHA256SUMS.txt" \
             --repo "${GITHUB_REPOSITORY}" \
             --verify-tag \
             --generate-notes \
-            --title "Codex 时区沙盒 ${GITHUB_REF_NAME}"
+            --title "Codex 时区沙盒 $tag"
