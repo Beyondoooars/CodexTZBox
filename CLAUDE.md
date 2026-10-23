@@ -23,7 +23,7 @@ CodexTZBox 是 Windows 10/11 专享的桌面启动器：让 OpenAI Codex 桌面�
 
 环境变量：`CODEX_TZ_DEV_ROOT`（本机 Windows 工具链根目录）、`CODEX_TZ_PROXY`（构建下载代理）、`CODEX_TOOLKIT_DIR`（构建后同步目标）。
 
-平台约束：仅面向 Windows——`desktop.mjs` 在非 win32 平台直接报错；需要 VS 2022 C++ Build Tools、Rust stable、Node ≥ 22.12；运行需系统具备 WebView2（Win10/11 一般内置）。CI 工作流模板在本地 `.github/workflows/build-desktop.yml`（windows-2022 构建，推 `v*` 标签自动发布 Release），但 `.github/` 被 .gitignore 忽略，远端仓库没有该工作流；如需自动发布须先把它纳入版本控制。
+平台约束：仅面向 Windows——`desktop.mjs` 在非 win32 平台直接报错；需要 VS 2022 C++ Build Tools、Rust stable、Node ≥ 22.12；运行需系统具备 WebView2（Win10/11 一般内置）。CI 见 `.github/workflows/build-desktop.yml`（windows-2022 构建，推 `main` 出构建产物，推 `v*` 标签自动发布 Release）；CI 环境设置了 `CI` 变量，`desktop.mjs` 因此跳过工具箱同步。
 
 ## 架构
 
@@ -39,7 +39,7 @@ CodexTZBox 是 Windows 10/11 专享的桌面启动器：让 OpenAI Codex 桌面�
 
 ## 约定与注意
 
-- `.gitignore` 有意忽略：`environment/`、`data/`、`docs/`、`.github/`、根目录 exe。`.github/` 工作流仅本地保留（因此远端仓库不会自动构建/发布）；桌面产物由 CI/Release 分发，不进源码树。
+- `.gitignore` 有意忽略：`environment/`、`data/`、`docs/`、根目录 exe。桌面产物由 CI/Release 分发，不进源码树；`.github/workflows/` 随仓库提交。
 - 界面文案与 README 均为中文；更新功能时同步维护根目录 `README.md` 与 `resource/README.md`（源码目录约定说明）。
 - 视觉语言（2026-10-22 重构）：纸面底色 + 墨色文字，双时钟对比是唯一主角（`TimePreview.vue`），其余为细线分隔的安静表单；设计令牌在 `styles/tokens.css`（含深色模式），MacVue 组件覆盖在 `styles/macvue-adapter.css`。不再使用卡片阴影堆叠与状态徽章。
 - 改动代码前先与用户对齐计划（迁移交接时用户明确指示「先不着急改代码」）；完成后建议跑 `npm run build:frontend` + `cargo check` 验证。
