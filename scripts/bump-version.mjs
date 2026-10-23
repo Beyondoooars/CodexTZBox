@@ -61,14 +61,28 @@ cargo = cargo.replace(/^version = ".*?"/m, `version = "${target}"`)
 fs.writeFileSync(cargoPath, cargo, 'utf8')
 
 // Cargo.lock 只改 codextzbox 自己那一条，依赖的版本必须保持原样。
+// 换行符要按文件现状处理：Windows 上检出是 CRLF、CI 上也可能是 CRLF，
+// 直接用 \n 拼正则会在其中一种情况下匹配不到。
 const cargoLockPath = path.join(resource, 'src-tauri', 'Cargo.lock')
-let cargoLock = fs.readFileSync(cargoLockPath, 'utf8')
-const selfEntry = /(\[\[package\]\]\nname = "codextzbox"\nversion = ")[^"]+(")/
-if (!selfEntry.test(cargoLock)) {
+const cargoLock = fs.readFileSync(cargoLockPath, 'utf8')
+const eol = cargoLock.includes('\r\n') ? '\r\n' : '\n'
+const lines = cargoLock.split(/\r?\n/)
+let inSelf = false
+let patched = false
+for (let i = 0; i < lines.length; i += 1) {
+  const line = lines[i]
+  if (line.trim() === '[[package]]') inSelf = false
+  else if (line.trim() === 'name = "codextzbox"') inSelf = true
+  else if (inSelf && line.startsWith('version = "')) {
+    lines[i] = `version = "${target}"`
+    patched = true
+    break
+  }
+}
+if (!patched) {
   console.error('[bump-version] Cargo.lock 中找不到 codextzbox 条目')
   process.exit(1)
 }
-cargoLock = cargoLock.replace(selfEntry, `$1${target}$2`)
-fs.writeFileSync(cargoLockPath, cargoLock, 'utf8')
+fs.writeFileSync(cargoLockPath, lines.join(eol), 'utf8')
 
 console.log('[bump-version] 已同步 package.json / package-lock.json / tauri.conf.json / Cargo.toml / Cargo.lock')
