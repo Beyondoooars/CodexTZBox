@@ -84,12 +84,9 @@ async function main() {
     await copyWithLockRetry(artifact);
     console.log(`已生成：${artifact}`);
 
-    // CI（GitHub Actions 等）没有本地工具箱目录，跳过同步；本地把 CODEX_TOOLKIT_DIR
-    // 显式设为空字符串也可禁用。未设置时才回退到默认工具箱路径。
-    const configuredToolkit = process.env.CODEX_TOOLKIT_DIR;
-    const toolkitDir = process.env.CI
-      ? ''
-      : configuredToolkit === undefined ? 'D:\\Toolkits\\CodexTZBox' : configuredToolkit.trim();
+    // 只在显式设置 CODEX_TOOLKIT_DIR 时才额外同步一份：程序里不写死任何本机路径，
+    // 换机器、CI 构建或开源分发时行为都一致；未设置就只产出仓库根目录的 exe。
+    const toolkitDir = (process.env.CODEX_TOOLKIT_DIR || '').trim();
     if (toolkitDir) {
       // 工具箱里的成品是用户实际运行的那份，同步失败必须让构建失败：
       // 只打印一行警告会让 build 报成功、工具箱却留着旧版本。

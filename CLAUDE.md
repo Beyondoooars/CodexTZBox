@@ -12,7 +12,7 @@ CodexTZBox 是 Windows 10/11 专享的桌面启动器：让 OpenAI Codex 桌面�
 
 - `npm install` — 安装依赖；要集中缓存可加 `--cache ../environment/npm-cache`
 - `npm run dev` — 开发模式（`desktop.mjs` → PowerShell 装配 VS 环境 → `tauri dev`，额外监听 backend 源文件变更）
-- `npm run build` — 编译 Release 单文件产物，输出到仓库根目录 `CodexTZBox.exe`，并按 `CODEX_TOOLKIT_DIR`（默认 `D:\Toolkits\CodexTZBox`）向工具箱目录同步一份拷贝；目标文件被运行中的成品占用时最多尝试 5 次后报错，不会强制结束进程
+- `npm run build` — 编译 Release 单文件产物，输出到仓库根目录 `CodexTZBox.exe`；仅当显式设置了 `CODEX_TOOLKIT_DIR` 时，才额外向该目录同步一份拷贝（程序不内置任何本机路径）。目标文件被运行中的成品占用时最多尝试 5 次后报错，不会强制结束进程
 - `npm run start` — 启动已构建的成品
 - `npm run build:frontend` — 前端类型检查 + 构建（`vue-tsc --noEmit && vite build`）；`npm run dev:frontend` 只起 Vite
 
@@ -21,9 +21,9 @@ CodexTZBox 是 Windows 10/11 专享的桌面启动器：让 OpenAI Codex 桌面�
 - `cargo check`；`cargo test`（单元测试位于 `resource/backend/common.rs` 的 `#[cfg(test)]`，例如 `cargo test legacy_settings_and_atomic_replace`）
 - 建议带上离线缓存环境：`CARGO_HOME=<仓库>/environment/cargo`、`CARGO_TARGET_DIR=<仓库>/environment/cargo-target`
 
-环境变量：`CODEX_TZ_DEV_ROOT`（本机 Windows 工具链根目录）、`CODEX_TZ_PROXY`（构建下载代理）、`CODEX_TOOLKIT_DIR`（构建后同步目标）。
+环境变量：`CODEX_TZ_DEV_ROOT`（本机 Windows 工具链根目录）、`CODEX_TZ_PROXY`（构建下载代理）、`CODEX_TOOLKIT_DIR`（可选，构建后额外同步的目标目录；不设置则不同步）。
 
-平台约束：仅面向 Windows——`desktop.mjs` 在非 win32 平台直接报错；需要 VS 2022 C++ Build Tools、Rust stable、Node ≥ 22.12；运行需系统具备 WebView2（Win10/11 一般内置）。CI 见 `.github/workflows/build-desktop.yml`（windows-2022 构建，推 `main` 出构建产物，推 `v*` 标签自动发布 Release）；CI 环境设置了 `CI` 变量，`desktop.mjs` 因此跳过工具箱同步。
+平台约束：仅面向 Windows——`desktop.mjs` 在非 win32 平台直接报错；需要 VS 2022 C++ Build Tools、Rust stable、Node ≥ 22.12；运行需系统具备 WebView2（Win10/11 一般内置）。CI 见 `.github/workflows/build-desktop.yml`（windows-2022 构建，推 `main` 出构建产物，推 `v*` 标签自动发布 Release）；CI 未设置 `CODEX_TOOLKIT_DIR`，因此不会尝试同步工具箱。
 
 ## 架构
 

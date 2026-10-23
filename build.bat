@@ -17,7 +17,7 @@ if errorlevel 1 (
   echo.
   echo [完成] 产物已生成：
   echo   1^) %~dp0CodexTZBox.exe
-  echo   2^) 工具箱目录中的同名文件（默认 D:\Toolkits\CodexTZBox）
+  echo   2^) 可选的工具箱副本（仅在设置了 CODEX_TOOLKIT_DIR 时）
 )
 
 echo.
