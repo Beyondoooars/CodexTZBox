@@ -50,4 +50,4 @@ CodexTZBox 是 Windows 10/11 专享的桌面启动器：让 OpenAI Codex 桌面�
 - v0.1.3；UI 已按纸面+墨色重构，仓库发布到 `Beyondoooars/CodexTZBox`（旧仓库与旧目录已删除）。
 - 启动流程加固：stderr 由后台线程增量读取并写入 64 KiB 封顶缓冲区，早退时无需等 EOF 即可回传诊断；客户端 800ms 内退出时报「启动后异常退出」（非 0）或「立即退出，可能已转交给运行中的实例」（0）。
 - 已知取舍：`Etc/GMT±N` 只能表达整小时偏移，固定偏移模式不支持 +5:30 这类半小时时区（界面不再提示，需要半小时偏移请选地区时区）。
-- `environment/`（约 7.5 GB）与 `resource/node_modules` 保留在本机用于离线构建，不进版本库。
+- 云端打包已可用（GitHub Actions），本机不再需要保留完整构建缓存：`environment/cargo-target` 已删除，需要时 `npm run build` 会自动重建；`environment/cargo`（约 559 MB，离线 crate 缓存）与 `resource/node_modules` 仅在需要本地构建/开发时保留，均可随时删除后重新生成。
