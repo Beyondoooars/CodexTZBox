@@ -41,16 +41,6 @@
   text-overflow: ellipsis;
 }
 
-.toolbar-title p {
-  margin: 2px 0 0;
-  color: var(--app-text-secondary);
-  font-size: 11px;
-  line-height: 1.4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 /* 区域标题：小号衬线 + 细线延伸 */
 .section-heading {
   display: flex;

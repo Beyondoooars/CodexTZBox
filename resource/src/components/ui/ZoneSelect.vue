@@ -30,7 +30,9 @@ const panelStyle = ref<{ left: string; top: string; width: string; maxHeight: st
   maxHeight: 'none',
 })
 
-const results = computed<ZoneOption[]>(() => searchZones(query.value).slice(0, 60))
+// 不做截断：结果面板自身可滚动，截断会让排在后面的时区（如北美）在默认列表里
+// 完全不可见，用户只能靠拼写搜索才找得到。
+const results = computed<ZoneOption[]>(() => searchZones(query.value))
 const displayValue = computed(() => {
   const label = zoneLabel(props.modelValue)
   return label ? `${label}（${props.modelValue}）` : props.modelValue
