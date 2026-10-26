@@ -129,6 +129,13 @@ jobs:
       contents: write
 
     steps:
+      # 生成发布说明要读提交历史与 scripts/，因此需要检出代码；
+      # 用 fetch-depth: 0 才能找到上一个版本 tag。
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - name: Download Windows artifact
         uses: actions/download-artifact@v8
         with:
@@ -138,6 +145,13 @@ jobs:
       - name: Generate SHA-256 checksums
         working-directory: release-assets
         run: sha256sum * > SHA256SUMS.txt
+
+      # 发布说明按提交类型分组生成，理由见脚本头部注释：
+      # GitHub 的 --generate-notes 只统计 PR，本仓库直接推 main，正文会几乎是空的。
+      - name: Generate release notes
+        run: node scripts/release-notes.mjs "$VERSION" release-notes.md
+        env:
+          VERSION: ${{ needs.build-windows.outputs.version }}
 
       - name: Publish release
         env:
@@ -152,5 +166,5 @@ jobs:
             "release-assets/SHA256SUMS.txt" \
             --repo "${GITHUB_REPOSITORY}" \
             --verify-tag \
-            --generate-notes \
+            --notes-file release-notes.md \
             --title "Codex 时区沙盒 $tag"
