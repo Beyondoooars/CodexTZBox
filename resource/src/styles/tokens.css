@@ -30,10 +30,16 @@
   --macvue-button-bg-prominent-pressed: var(--app-accent-strong);
   --macvue-label-on-accent: #fffefb;
 
-  /* 排版 */
-  --app-font: 'Iowan Old Style', 'Palatino Linotype', 'Source Han Serif SC', 'Songti SC', 'Noto Serif CJK SC', serif;
-  --app-font-ui: -apple-system, 'SF Pro Text', 'Segoe UI Variable', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
-  --app-font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Consolas, monospace;
+  /* 排版
+     标题：Constantia 比 Palatino 笔画更结实，小字号不发虚，与中文宋体的
+           粗细对比也接近；Cambria 作为同源兜底。
+     数字：Bahnschrift 是 Win10/11 自带的 DIN 血统可变字体，数字方正、
+           同宽，比 Cascadia 更像仪表读数。缺 Bahnschrift 的老系统依次落到
+           Consolas / Cascadia Mono。
+     界面：Segoe UI Variable 在 Win11 上是新版本，Win10 回落 Segoe UI。 */
+  --app-font: 'Constantia', 'Cambria', 'Source Han Serif SC', 'Songti SC', 'Noto Serif SC', 'Noto Serif CJK SC', serif;
+  --app-font-ui: 'Segoe UI Variable Text', 'Segoe UI Variable', -apple-system, 'SF Pro Text', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
+  --app-font-mono: 'Bahnschrift', 'Cascadia Mono', Consolas, ui-monospace, 'SFMono-Regular', monospace;
 
   --app-radius: 4px;
   --app-radius-lg: 8px;

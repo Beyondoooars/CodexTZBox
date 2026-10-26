@@ -46,6 +46,19 @@ input:focus-visible,
   color: var(--app-text);
 }
 
+/* Bahnschrift 是可变字体而非等宽字体，数字默认是比例宽度。所有使用
+   --app-font-mono 的元素都必须锁定 tabular 数字，否则数字变化时宽度会
+   跳变（时钟每秒刷新就会出现左右抖动）。
+   这里统一兜底，不依赖每处使用点各自记得写。 */
+.clock-time-val,
+.clock-offset-tag,
+.ip-line strong,
+.timezone-value,
+.zone-select-option-detail {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
