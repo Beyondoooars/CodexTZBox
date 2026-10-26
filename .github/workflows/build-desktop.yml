@@ -110,11 +110,19 @@ jobs:
           git add resource/package.json resource/package-lock.json resource/src-tauri/tauri.conf.json resource/src-tauri/Cargo.toml resource/src-tauri/Cargo.lock
           # 显式指定了与当前相同的版本号时文件没有变化，仍需一次提交作为标签的落点。
           git commit --allow-empty -m "chore: 发布 v$env:VERSION [skip ci]"
+          # 构建过程可能在工作区留下未暂存改动，而 git pull --rebase 要求工作区
+          # 干净：拉取时必须自动暂存，否则重试一次都跑不完。pull 失败才抛错——
+          # 首次推送失败不一定是冲突，直接放弃会把偶发的网络错误当成冲突。
           for ($attempt = 1; $attempt -le 3; $attempt++) {
             git push origin HEAD:main
             if ($LASTEXITCODE -eq 0) { break }
             if ($attempt -eq 3) { throw '版本号提交推送失败' }
-            git pull --rebase origin main
+            git -c rebase.autoStash=true pull --rebase origin main
+            if ($LASTEXITCODE -ne 0) {
+              "第 $attempt 次同步 origin/main 失败，当前工作区：" | Out-Host
+              git status --short | Out-Host
+              throw '版本号提交推送失败'
+            }
           }
           git tag "v$env:VERSION"
           git push origin "v$env:VERSION"
