@@ -130,20 +130,10 @@ function preflight() {
     problems.push('gh 未登录或不可用，请先运行 gh auth login')
   }
 
-  // 推送 workflow 文件需要 workflow scope，缺了会在最后一步才被 GitHub 拒绝，
-  // 而那时提交已经做完了。这里提前拦下来。
-  try {
-    const status = spawnSync('gh', ['auth', 'status'], { cwd: root, encoding: 'utf8' })
-    const text = `${status.stdout || ''}${status.stderr || ''}`
-    if (/Token scopes:/.test(text) && !/'workflow'/.test(text)) {
-      problems.push(
-        '当前 gh 凭据缺少 workflow scope，无法推送 .github/workflows/ 下的改动。\n' +
-        '    修复：gh auth refresh -s workflow',
-      )
-    }
-  } catch {
-    /* 上面的检查已经报过 gh 不可用 */
-  }
+  // 不检查 workflow scope：这个脚本只读远端状态、触发 workflow，不推送
+  // 任何文件。版本号回写由 CI 用 GITHUB_TOKEN 完成，而那枚 token 天然
+  // 有 workflow 权限。本地缺 scope 只影响手动 git push workflow 文件，
+  // 与发版无关。
 
   // 在 main 分支
   let branch = ''
