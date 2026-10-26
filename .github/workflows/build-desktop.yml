@@ -33,14 +33,14 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # 写回版本号提交与打标签需要完整历史。
           fetch-depth: 0
           ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
@@ -90,7 +90,7 @@ jobs:
           Get-FileHash "CodexTZBox.exe" -Algorithm SHA256
 
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CodexTZBox-Windows-x64
           path: CodexTZBox.exe
@@ -130,7 +130,7 @@ jobs:
 
     steps:
       - name: Download Windows artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: CodexTZBox-Windows-x64
           path: release-assets
