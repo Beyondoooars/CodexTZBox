@@ -130,6 +130,21 @@ function preflight() {
     problems.push('gh 未登录或不可用，请先运行 gh auth login')
   }
 
+  // 推送 workflow 文件需要 workflow scope，缺了会在最后一步才被 GitHub 拒绝，
+  // 而那时提交已经做完了。这里提前拦下来。
+  try {
+    const status = spawnSync('gh', ['auth', 'status'], { cwd: root, encoding: 'utf8' })
+    const text = `${status.stdout || ''}${status.stderr || ''}`
+    if (/Token scopes:/.test(text) && !/'workflow'/.test(text)) {
+      problems.push(
+        '当前 gh 凭据缺少 workflow scope，无法推送 .github/workflows/ 下的改动。\n' +
+        '    修复：gh auth refresh -s workflow',
+      )
+    }
+  } catch {
+    /* 上面的检查已经报过 gh 不可用 */
+  }
+
   // 在 main 分支
   let branch = ''
   try {
@@ -186,6 +201,18 @@ async function main() {
   const target = previewVersion()
 
   info(`当前版本 v${current}，目标版本 v${target}`)
+
+  // workflow_dispatch 触发的是「默认分支上的」工作流定义。本地领先时，
+  // 发出去的一定是旧定义，等于白发布一次。
+  try {
+    const ahead = Number(run('git', ['rev-list', '--count', 'origin/main..HEAD']))
+    if (ahead > 0) {
+      fail(`本地领先 origin/main ${ahead} 个提交。发布必须基于已推送的代码，请先 git push。`)
+    }
+  } catch {
+    /* preflight 会再查一次远端同步 */
+  }
+
   preflight()
   ok('前置检查通过')
 
